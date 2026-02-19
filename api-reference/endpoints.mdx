@@ -7,7 +7,7 @@ description: 'Manage webhooks and email forwarding endpoints'
 
 <CodeGroup>
 ```bash cURL - Webhook
-curl -X POST https://api.inbound.new/api/e2/endpoints \
+curl -X POST https://inbound.new/api/e2/endpoints \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -26,7 +26,7 @@ curl -X POST https://api.inbound.new/api/e2/endpoints \
 ```
 
 ```bash cURL - Email Forward
-curl -X POST https://api.inbound.new/api/e2/endpoints \
+curl -X POST https://inbound.new/api/e2/endpoints \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -40,7 +40,7 @@ curl -X POST https://api.inbound.new/api/e2/endpoints \
 ```
 
 ```bash cURL - Email Group
-curl -X POST https://api.inbound.new/api/e2/endpoints \
+curl -X POST https://inbound.new/api/e2/endpoints \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -58,7 +58,7 @@ curl -X POST https://api.inbound.new/api/e2/endpoints \
 ```
 
 ```typescript TypeScript SDK
-import { Inbound } from '@inbound/sdk'
+import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
 
@@ -294,7 +294,7 @@ Create a new endpoint (webhook, email, or email_group) for the authenticated use
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/endpoints?type=webhook&limit=50" \
+curl -X GET "https://inbound.new/api/e2/endpoints?type=webhook&limit=50" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -411,7 +411,7 @@ Get paginated list of endpoints for authenticated user with optional filtering b
 
 <CodeGroup>
 ```bash cURL
-curl -X GET https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+curl -X GET https://inbound.new/api/e2/endpoints/ep_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -434,7 +434,7 @@ Same structure as Create Endpoint response.
 
 <CodeGroup>
 ```bash cURL
-curl -X PATCH https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+curl -X PATCH https://inbound.new/api/e2/endpoints/ep_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -491,7 +491,7 @@ Same structure as Create Endpoint response.
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.inbound.new/api/e2/endpoints/ep_abc123/test \
+curl -X POST https://inbound.new/api/e2/endpoints/ep_abc123/test \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -539,7 +539,7 @@ Test an endpoint by sending a sample payload. Useful for verifying webhook URLs 
 
 <CodeGroup>
 ```bash cURL
-curl -X DELETE https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+curl -X DELETE https://inbound.new/api/e2/endpoints/ep_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 

@@ -554,7 +554,7 @@ export async function POST(request: NextRequest) {
 
 ```typescript
 // Use idempotency keys to safely retry requests
-const response = await fetch('https://api.inbound.new/api/e2/emails', {
+const response = await fetch('https://inbound.new/api/e2/emails', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,

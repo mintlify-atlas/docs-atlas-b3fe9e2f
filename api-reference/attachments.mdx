@@ -7,13 +7,13 @@ description: 'Download email attachments'
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/attachments/eml_abc123/report.pdf" \
+curl -X GET "https://inbound.new/api/e2/attachments/eml_abc123/report.pdf" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   --output report.pdf
 ```
 
 ```typescript TypeScript SDK
-import { Inbound } from '@inbound/sdk'
+import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
 
@@ -29,7 +29,7 @@ await Bun.write('report.pdf', attachment)
 
 ```javascript JavaScript - Fetch
 const response = await fetch(
-  'https://api.inbound.new/api/e2/attachments/eml_abc123/report.pdf',
+  'https://inbound.new/api/e2/attachments/eml_abc123/report.pdf',
   {
     headers: {
       'Authorization': 'Bearer YOUR_API_KEY'
@@ -271,7 +271,7 @@ async function downloadAttachment(emailId: string, filename: string) {
     const encodedFilename = encodeURIComponent(filename)
     
     const response = await fetch(
-      `https://api.inbound.new/api/e2/attachments/${emailId}/${encodedFilename}`,
+      `https://inbound.new/api/e2/attachments/${emailId}/${encodedFilename}`,
       {
         headers: {
           'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`

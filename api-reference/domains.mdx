@@ -7,7 +7,7 @@ description: 'Manage email domains and DNS verification'
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.inbound.new/api/e2/domains \
+curl -X POST https://inbound.new/api/e2/domains \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -16,7 +16,7 @@ curl -X POST https://api.inbound.new/api/e2/domains \
 ```
 
 ```typescript TypeScript SDK
-import { Inbound } from '@inbound/sdk'
+import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
 
@@ -201,7 +201,7 @@ Add a new domain for email receiving. Automatically initiates verification and r
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/domains?limit=50" \
+curl -X GET "https://inbound.new/api/e2/domains?limit=50" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -436,7 +436,7 @@ Get paginated list of domains for authenticated user with optional filtering.
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/domains/dom_abc123?check=true" \
+curl -X GET "https://inbound.new/api/e2/domains/dom_abc123?check=true" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -521,7 +521,7 @@ Same structure as individual domain object in List Domains response, plus:
 
 <CodeGroup>
 ```bash cURL
-curl -X PATCH https://api.inbound.new/api/e2/domains/dom_abc123 \
+curl -X PATCH https://inbound.new/api/e2/domains/dom_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -607,7 +607,7 @@ Update catch-all email settings for a domain. Catch-all receives emails sent to 
 
 <CodeGroup>
 ```bash cURL
-curl -X DELETE https://api.inbound.new/api/e2/domains/dom_abc123 \
+curl -X DELETE https://inbound.new/api/e2/domains/dom_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 

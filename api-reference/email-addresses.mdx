@@ -7,7 +7,7 @@ description: 'Manage individual email addresses and routing'
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.inbound.new/api/e2/email-addresses \
+curl -X POST https://inbound.new/api/e2/email-addresses \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -19,7 +19,7 @@ curl -X POST https://api.inbound.new/api/e2/email-addresses \
 ```
 
 ```typescript TypeScript SDK
-import { Inbound } from '@inbound/sdk'
+import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
 
@@ -192,7 +192,7 @@ Create a new email address for an authenticated user's domain, optionally routin
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/email-addresses?domainId=dom_abc123&limit=50" \
+curl -X GET "https://inbound.new/api/e2/email-addresses?domainId=dom_abc123&limit=50" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -306,7 +306,7 @@ Get paginated list of email addresses for authenticated user with optional filte
 
 <CodeGroup>
 ```bash cURL
-curl -X GET https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+curl -X GET https://inbound.new/api/e2/email-addresses/addr_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -361,7 +361,7 @@ Same structure as Create Email Address response.
 
 <CodeGroup>
 ```bash cURL
-curl -X PATCH https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+curl -X PATCH https://inbound.new/api/e2/email-addresses/addr_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -438,7 +438,7 @@ Same structure as Create Email Address response.
 
 <CodeGroup>
 ```bash cURL
-curl -X DELETE https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+curl -X DELETE https://inbound.new/api/e2/email-addresses/addr_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 

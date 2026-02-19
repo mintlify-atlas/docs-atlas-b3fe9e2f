@@ -7,12 +7,12 @@ description: 'Manage email threads and conversations'
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.inbound.new/api/e2/mail/threads?limit=25&unread=true" \
+curl -X GET "https://inbound.new/api/e2/mail/threads?limit=25&unread=true" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
 ```typescript TypeScript SDK
-import { Inbound } from '@inbound/sdk'
+import { Inbound } from 'inboundemail'
 
 const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
 
@@ -249,7 +249,7 @@ Use this endpoint to list threads, then use `GET /mail/threads/:id` to fetch all
 
 <CodeGroup>
 ```bash cURL
-curl -X GET https://api.inbound.new/api/e2/mail/threads/thread_abc123 \
+curl -X GET https://inbound.new/api/e2/mail/threads/thread_abc123 \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
