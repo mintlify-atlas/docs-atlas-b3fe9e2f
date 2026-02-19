@@ -1,0 +1,395 @@
+---
+title: "Pagination"
+description: "Working with paginated list endpoints"
+---
+
+## Overview
+
+All list endpoints in the Inbound API support **offset-based pagination** to efficiently retrieve large datasets. Paginated responses include metadata to help you navigate through results.
+
+## Pagination Parameters
+
+List endpoints accept the following query parameters:
+
+<ParamField query="limit" type="integer" default="50">
+  Number of items to return per page. Maximum: 100, Minimum: 1.
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of items to skip before starting to return results. Used for pagination.
+</ParamField>
+
+### Example Request
+
+```bash
+curl "https://inbound.new/api/e2/domains?limit=10&offset=20" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+## Response Structure
+
+All paginated endpoints return responses in this format:
+
+```json
+{
+  "data": [
+    {
+      "id": "dom_abc123",
+      "domain": "example.com",
+      "status": "verified"
+    },
+    {
+      "id": "dom_def456",
+      "domain": "test.com",
+      "status": "pending"
+    }
+  ],
+  "pagination": {
+    "limit": 10,
+    "offset": 20,
+    "total": 150,
+    "hasMore": true
+  }
+}
+```
+
+<ResponseField name="data" type="array" required>
+  Array of resource objects for the current page
+</ResponseField>
+
+<ResponseField name="pagination" type="object" required>
+  Pagination metadata
+  
+  <ResponseField name="limit" type="number" required>
+    Number of items per page (same as request parameter)
+  </ResponseField>
+  
+  <ResponseField name="offset" type="number" required>
+    Number of items skipped (same as request parameter)
+  </ResponseField>
+  
+  <ResponseField name="total" type="number" required>
+    Total number of items across all pages
+  </ResponseField>
+  
+  <ResponseField name="hasMore" type="boolean" required>
+    Whether there are more pages after this one
+  </ResponseField>
+</ResponseField>
+
+## Pagination Logic
+
+The `hasMore` field is calculated as:
+
+```typescript
+hasMore = offset + data.length < total
+```
+
+Example:
+- `limit: 10`, `offset: 0`, `total: 25` → `hasMore: true` (10 < 25)
+- `limit: 10`, `offset: 20`, `total: 25` → `hasMore: false` (25 >= 25)
+
+## Paginated Endpoints
+
+The following endpoints support pagination:
+
+- `GET /api/e2/domains` - List domains
+- `GET /api/e2/email-addresses` - List email addresses
+- `GET /api/e2/emails` - List emails
+- `GET /api/e2/endpoints` - List endpoints/webhooks
+- `GET /api/e2/guard` - List guard rules
+
+## Usage Examples
+
+### Fetching First Page
+
+```typescript
+const response = await fetch(
+  'https://inbound.new/api/e2/domains?limit=50&offset=0',
+  {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    }
+  }
+)
+
+const { data, pagination } = await response.json()
+
+console.log(`Page 1: ${data.length} items`)
+console.log(`Total items: ${pagination.total}`)
+console.log(`Has more: ${pagination.hasMore}`)
+```
+
+### Fetching Next Page
+
+```typescript
+if (pagination.hasMore) {
+  const nextOffset = pagination.offset + pagination.limit
+  
+  const nextPage = await fetch(
+    `https://inbound.new/api/e2/domains?limit=50&offset=${nextOffset}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+  
+  const { data: nextData } = await nextPage.json()
+  console.log(`Page 2: ${nextData.length} items`)
+}
+```
+
+### Fetching All Pages
+
+```typescript
+async function fetchAllDomains(apiKey: string) {
+  const allDomains = []
+  let offset = 0
+  const limit = 100 // Use max limit for efficiency
+  
+  while (true) {
+    const response = await fetch(
+      `https://inbound.new/api/e2/domains?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+    
+    const { data, pagination } = await response.json()
+    allDomains.push(...data)
+    
+    if (!pagination.hasMore) {
+      break
+    }
+    
+    offset += limit
+  }
+  
+  return allDomains
+}
+
+const domains = await fetchAllDomains(apiKey)
+console.log(`Fetched ${domains.length} total domains`)
+```
+
+### Using the SDK
+
+The SDK handles pagination automatically:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+// Single page
+const { data, pagination } = await inbound.domains.list({
+  limit: 50,
+  offset: 0
+})
+
+// Fetch all pages
+const allDomains = []
+let offset = 0
+
+do {
+  const response = await inbound.domains.list({ limit: 100, offset })
+  allDomains.push(...response.data)
+  offset += 100
+} while (response.pagination.hasMore)
+```
+
+## Filtering with Pagination
+
+Combine pagination with filters:
+
+```bash
+# Get first 20 verified domains
+curl "https://inbound.new/api/e2/domains?status=verified&limit=20&offset=0" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Get active email addresses (page 2)
+curl "https://inbound.new/api/e2/email-addresses?isActive=true&limit=50&offset=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Important:** The `total` count reflects the filtered results, not all records.
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "limit": 20,
+    "offset": 0,
+    "total": 45,  // Only 45 verified domains
+    "hasMore": true
+  }
+}
+```
+
+## Default Values
+
+If pagination parameters are omitted, defaults are used:
+
+```bash
+# These are equivalent:
+curl "https://inbound.new/api/e2/domains" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+curl "https://inbound.new/api/e2/domains?limit=50&offset=0" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Pagination Best Practices
+
+### 1. Use Maximum Limit for Efficiency
+
+```typescript
+// ✅ Good: Fewer requests
+const { data } = await inbound.domains.list({ limit: 100 })
+
+// ❌ Bad: More requests needed
+const { data } = await inbound.domains.list({ limit: 10 })
+```
+
+### 2. Check hasMore Before Fetching
+
+```typescript
+if (pagination.hasMore) {
+  // Fetch next page
+} else {
+  console.log('No more pages')
+}
+```
+
+### 3. Calculate Total Pages
+
+```typescript
+const totalPages = Math.ceil(pagination.total / pagination.limit)
+console.log(`Page ${Math.floor(pagination.offset / pagination.limit) + 1} of ${totalPages}`)
+```
+
+### 4. Handle Empty Results
+
+```typescript
+if (data.length === 0) {
+  if (pagination.offset === 0) {
+    console.log('No items found')
+  } else {
+    console.log('Reached end of results')
+  }
+}
+```
+
+### 5. Respect Rate Limits
+
+When fetching multiple pages, add delays:
+
+```typescript
+async function fetchAllWithRateLimit(apiKey: string) {
+  const allDomains = []
+  let offset = 0
+  
+  while (true) {
+    const { data, pagination } = await inbound.domains.list({ 
+      limit: 100, 
+      offset 
+    })
+    
+    allDomains.push(...data)
+    
+    if (!pagination.hasMore) break
+    
+    offset += 100
+    
+    // Add delay to respect rate limits (10 req/s = 100ms between requests)
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  return allDomains
+}
+```
+
+## Pagination vs Cursor-Based
+
+The E2 API uses **offset-based pagination** for most endpoints. Some specialized endpoints (like `/mail/threads`) use **cursor-based pagination** for real-time data.
+
+### Offset-Based (Most Endpoints)
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 150,
+    "hasMore": true
+  }
+}
+```
+
+### Cursor-Based (Threads Only)
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "limit": 50,
+    "next_cursor": "thread_xyz789",
+    "has_more": true
+  }
+}
+```
+
+## Database Implementation
+
+Pagination is implemented using Drizzle ORM:
+
+```typescript
+const limit = Math.min(query.limit || 50, 100)
+const offset = query.offset || 0
+
+// Get paginated data
+const domains = await db
+  .select()
+  .from(emailDomains)
+  .where(eq(emailDomains.userId, userId))
+  .orderBy(desc(emailDomains.createdAt))
+  .limit(limit)
+  .offset(offset)
+
+// Get total count
+const totalCountResult = await db
+  .select({ count: count() })
+  .from(emailDomains)
+  .where(eq(emailDomains.userId, userId))
+
+const totalCount = totalCountResult[0]?.count || 0
+
+// Build response
+return {
+  data: domains,
+  pagination: {
+    limit,
+    offset,
+    total: totalCount,
+    hasMore: offset + domains.length < totalCount
+  }
+}
+```
+
+## Sorting
+
+Paginated results are sorted by creation date (newest first) by default:
+
+```typescript
+.orderBy(desc(emailDomains.createdAt))
+```
+
+Some endpoints support custom sorting via query parameters. Check individual endpoint documentation.

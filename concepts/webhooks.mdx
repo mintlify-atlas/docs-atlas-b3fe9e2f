@@ -1,0 +1,572 @@
+---
+title: "Webhooks"
+description: "Understanding webhook payloads, security, and handling incoming emails"
+---
+
+## Overview
+
+Webhooks are how Inbound notifies your application when emails arrive. When an email is received at one of your configured addresses, Inbound sends an HTTP POST request to your webhook endpoint with the complete email data, parsed and ready to use.
+
+<Info>
+Webhooks in Inbound:
+- Are sent via HTTP POST with JSON payload
+- Include complete email data (headers, body, attachments)
+- Support signature verification for security
+- Automatically retry on failure (up to 3 times)
+- Include parsed and cleaned email content
+</Info>
+
+## Webhook Payload Structure
+
+From the TypeScript types (`lib/types/inbound-webhooks.ts:69-90`):
+
+```typescript
+import type { InboundWebhookPayload } from 'inboundemail'
+
+const payload: InboundWebhookPayload = {
+  event: 'email.received',
+  timestamp: '2024-01-15T10:30:00Z',
+  email: {
+    id: 'inbnd_abc123def456ghi',
+    messageId: '<unique@example.com>',
+    from: {
+      text: 'John Doe <john@example.com>',
+      addresses: [{
+        name: 'John Doe',
+        address: 'john@example.com'
+      }]
+    },
+    to: {
+      text: 'support@yourdomain.com',
+      addresses: [{
+        name: null,
+        address: 'support@yourdomain.com'
+      }]
+    },
+    recipient: 'support@yourdomain.com',
+    subject: 'Help with my order',
+    receivedAt: '2024-01-15T10:30:00Z',
+    threadId: 'thrd_xyz789', // If part of a conversation thread
+    threadPosition: 1, // Position in thread (1 = first message)
+    parsedData: {
+      messageId: '<unique@example.com>',
+      date: new Date('2024-01-15T10:30:00Z'),
+      subject: 'Help with my order',
+      from: { /* same as above */ },
+      to: { /* same as above */ },
+      cc: null,
+      bcc: null,
+      replyTo: null,
+      inReplyTo: undefined, // Message ID this is replying to
+      references: undefined, // Thread references
+      textBody: 'Hello, I need help with my recent order...',
+      htmlBody: '<p>Hello, I need help with my recent order...</p>',
+      raw: 'From: john@example.com\r\nTo: support@yourdomain.com\r\n...',
+      attachments: [
+        {
+          filename: 'order-receipt.pdf',
+          contentType: 'application/pdf',
+          size: 45678,
+          contentId: '<att_abc123>',
+          contentDisposition: 'attachment',
+          downloadUrl: 'https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf'
+        }
+      ],
+      headers: {
+        'from': { /* detailed header info */ },
+        'to': { /* detailed header info */ },
+        'subject': 'Help with my order',
+        'message-id': '<unique@example.com>',
+        'received': [ /* array of received headers */ ],
+        'dkim-signature': { /* DKIM verification data */ },
+        // ... all email headers
+      },
+      priority: undefined
+    },
+    cleanedContent: {
+      html: '<p>Hello, I need help with my recent order...</p>',
+      text: 'Hello, I need help with my recent order...',
+      hasHtml: true,
+      hasText: true,
+      attachments: [ /* same as parsedData.attachments */ ],
+      headers: { /* same as parsedData.headers */ }
+    }
+  },
+  endpoint: {
+    id: 'endp_xyz789',
+    name: 'Support Webhook',
+    type: 'webhook'
+  }
+}
+```
+
+## Email Address Types
+
+From the types (`lib/types/inbound-webhooks.ts:1-9`):
+
+```typescript
+// Individual address entry
+export interface InboundEmailAddressEntry {
+  name: string | null;      // Display name (e.g., "John Doe")
+  address: string | null;   // Email address (e.g., "john@example.com")
+}
+
+// Complete address object with text representation
+export interface InboundEmailAddress {
+  text: string;                          // Full text: "John Doe <john@example.com>"
+  addresses: InboundEmailAddressEntry[]; // Parsed individual addresses
+}
+
+// Example:
+from: {
+  text: 'John Doe <john@example.com>',
+  addresses: [
+    { name: 'John Doe', address: 'john@example.com' }
+  ]
+}
+
+// Multiple recipients:
+to: {
+  text: 'alice@company.com, Bob Smith <bob@company.com>',
+  addresses: [
+    { name: null, address: 'alice@company.com' },
+    { name: 'Bob Smith', address: 'bob@company.com' }
+  ]
+}
+```
+
+## Webhook Headers
+
+Every webhook request includes these security headers:
+
+| Header | Description | Example |
+|--------|-------------|--------|
+| `X-Webhook-Verification-Token` | Secret token for verification | `tok_abc123def456...` |
+| `X-Endpoint-ID` | ID of the endpoint | `endp_xyz789` |
+| `X-Webhook-Event` | Event type | `email.received` |
+| `X-Webhook-Timestamp` | ISO 8601 timestamp | `2024-01-15T10:30:00Z` |
+| `X-Email-ID` | Inbound email ID | `inbnd_abc123def456` |
+| `X-Message-ID` | Original email message ID | `<unique@example.com>` |
+| `Content-Type` | Always JSON | `application/json` |
+| `User-Agent` | Inbound identifier | `InboundEmail-Webhook/1.0` |
+
+## Webhook Security
+
+<Warning>
+**Always verify webhook requests!** Without verification, anyone could send fake webhooks to your endpoint and potentially access sensitive operations.
+</Warning>
+
+### Verification Token Method
+
+The simplest way to verify webhooks is using the verification token:
+
+```typescript
+import { Inbound, verifyWebhookFromHeaders } from 'inboundemail'
+import type { InboundWebhookPayload } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  // Verify webhook authenticity using headers
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  
+  if (!isValid) {
+    console.warn('⚠️ Webhook verification failed', {
+      endpointId: request.headers.get('X-Endpoint-ID'),
+      timestamp: request.headers.get('X-Webhook-Timestamp')
+    })
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Process verified webhook
+  const payload: InboundWebhookPayload = await request.json()
+  
+  console.log('✅ Verified webhook from:', payload.email.from.addresses[0].address)
+  
+  return new Response('OK', { status: 200 })
+}
+```
+
+### Manual Token Verification
+
+If you prefer to verify manually:
+
+```typescript
+import type { InboundWebhookPayload } from 'inboundemail'
+
+export async function POST(request: Request) {
+  const endpointId = request.headers.get('X-Endpoint-ID')
+  const receivedToken = request.headers.get('X-Webhook-Verification-Token')
+  
+  // Fetch your endpoint configuration
+  const endpoint = await inbound.endpoints.get(endpointId)
+  const expectedToken = endpoint.config.verificationToken
+  
+  // Compare tokens (constant-time comparison recommended)
+  if (receivedToken !== expectedToken) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // Verified - process webhook
+  const payload: InboundWebhookPayload = await request.json()
+  // ...
+}
+```
+
+<Tip>
+**Security best practices:**
+- Always use HTTPS endpoints (not HTTP)
+- Verify the `X-Webhook-Verification-Token` on every request
+- Check the `X-Webhook-Timestamp` to prevent replay attacks
+- Store verification tokens securely (environment variables)
+- Return 200 OK only after successful processing
+</Tip>
+
+## Handling Webhooks
+
+### Basic Webhook Handler
+
+```typescript
+import { Inbound, verifyWebhookFromHeaders } from 'inboundemail'
+import type { InboundWebhookPayload } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: Request) {
+  // 1. Verify webhook
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  if (!isValid) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+  
+  // 2. Parse payload
+  const payload: InboundWebhookPayload = await request.json()
+  const { email, endpoint } = payload
+  
+  // 3. Extract email data
+  const from = email.from.addresses[0].address
+  const subject = email.subject
+  const textBody = email.parsedData.textBody
+  const htmlBody = email.parsedData.htmlBody
+  
+  console.log(`📧 Email from ${from}: ${subject}`)
+  
+  // 4. Process email based on content
+  if (subject.toLowerCase().includes('support')) {
+    await handleSupportRequest(email)
+  } else if (subject.toLowerCase().includes('feedback')) {
+    await handleFeedback(email)
+  }
+  
+  // 5. Return success
+  return new Response('OK', { status: 200 })
+}
+```
+
+### Handling Attachments
+
+From the example (`docs/api-reference/webhook.mdx:217-245`):
+
+```typescript
+export async function POST(request: Request) {
+  const payload: InboundWebhookPayload = await request.json()
+  const { email } = payload
+  
+  // Check for attachments
+  if (email.parsedData.attachments.length > 0) {
+    for (const attachment of email.parsedData.attachments) {
+      console.log(`📎 Attachment: ${attachment.filename}`)
+      console.log(`   Type: ${attachment.contentType}`)
+      console.log(`   Size: ${attachment.size} bytes`)
+      console.log(`   URL: ${attachment.downloadUrl}`)
+      
+      // Download the attachment
+      const response = await fetch(attachment.downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`
+        }
+      })
+      
+      if (response.ok) {
+        const fileBuffer = await response.arrayBuffer()
+        const blob = new Blob([fileBuffer], { type: attachment.contentType })
+        
+        // Upload to your storage, process, etc.
+        await uploadToS3(blob, attachment.filename)
+        await processAttachment(blob, attachment.contentType)
+      }
+    }
+  }
+  
+  return new Response('OK', { status: 200 })
+}
+```
+
+<Note>
+Attachment download URLs:
+- Format: `https://inbound.new/api/e2/attachments/{emailId}/{filename}`
+- Require API key authentication
+- Are valid for the lifetime of the email
+- Return the original file with correct Content-Type
+</Note>
+
+### Handling Threads
+
+Inbound automatically tracks conversation threads:
+
+```typescript
+export async function POST(request: Request) {
+  const payload: InboundWebhookPayload = await request.json()
+  const { email } = payload
+  
+  // Check if email is part of a thread
+  if (email.threadId) {
+    console.log(`🧵 Thread ID: ${email.threadId}`)
+    console.log(`   Position: ${email.threadPosition}`)
+    console.log(`   In reply to: ${email.parsedData.inReplyTo}`)
+    
+    // Fetch previous messages in thread
+    const thread = await inbound.emails.list({
+      threadId: email.threadId,
+      sortBy: 'threadPosition',
+      sortOrder: 'asc'
+    })
+    
+    console.log(`   Thread has ${thread.data.length} messages`)
+    
+    // Update conversation in your system
+    await updateConversation(email.threadId, email)
+  } else {
+    // New conversation
+    await createConversation(email)
+  }
+}
+```
+
+### Auto-Reply Example
+
+From the README (`README.md:37-76`):
+
+```typescript
+import { Inbound, type InboundWebhookPayload, isInboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    
+    // Verify this is a valid Inbound webhook
+    if (!isInboundWebhookPayload(payload)) {
+      return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+    }
+    
+    const { email } = payload
+    console.log(`📧 Received email: ${email.subject} from ${email.from?.addresses?.[0]?.address}`)
+    
+    // Auto-reply to support emails
+    if (email.subject?.toLowerCase().includes('support')) {
+      await inbound.reply(email, {
+        from: 'support@yourdomain.com',
+        text: 'Thanks for contacting support! We\'ll get back to you within 24 hours.',
+        tags: [{ name: 'type', value: 'auto-reply' }]
+      })
+    }
+    
+    // Auto-reply to thank you emails
+    if (email.subject?.toLowerCase().includes('thanks')) {
+      await inbound.reply(email, {
+        from: 'hello@yourdomain.com',
+        html: '<p>You\'re welcome! Let us know if you need anything else.</p>'
+      })
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+  }
+}
+```
+
+## Webhook Retry Logic
+
+<Info>
+Inbound automatically retries failed webhook deliveries:
+- **Retry attempts**: Up to 3 times (configurable)
+- **Retry delay**: Exponential backoff (1s, 2s, 4s)
+- **Success criteria**: HTTP 200-299 status code
+- **Failure criteria**: Non-2xx status, timeout, or network error
+</Info>
+
+Tracking webhook deliveries:
+
+```typescript
+// Webhook deliveries are tracked in the endpointDeliveries table
+// You can query delivery status:
+
+const deliveries = await inbound.endpoints.listDeliveries('endp_xyz789', {
+  status: 'failed',
+  limit: 10
+})
+
+for (const delivery of deliveries.data) {
+  console.log(`❌ Failed delivery:`, {
+    emailId: delivery.emailId,
+    attempts: delivery.attempts,
+    lastAttempt: delivery.lastAttemptAt,
+    error: delivery.responseData.error
+  })
+}
+```
+
+## Webhook Best Practices
+
+<Warning>
+**Response Time**
+- Webhooks have a 30-second timeout (configurable up to 120s)
+- Process webhooks asynchronously when possible
+- Return 200 OK quickly, then process in background
+- Use queues (SQS, Redis, etc.) for heavy processing
+</Warning>
+
+### Async Processing Pattern
+
+```typescript
+import { Queue } from 'bull'
+
+const emailQueue = new Queue('email-processing')
+
+export async function POST(request: Request) {
+  // 1. Verify webhook (fast)
+  const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+  if (!isValid) return new Response('Unauthorized', { status: 401 })
+  
+  // 2. Parse payload (fast)
+  const payload: InboundWebhookPayload = await request.json()
+  
+  // 3. Queue for processing (fast)
+  await emailQueue.add('process-email', {
+    emailId: payload.email.id,
+    from: payload.email.from.addresses[0].address,
+    subject: payload.email.subject
+  })
+  
+  // 4. Return success immediately (< 1 second)
+  return new Response('OK', { status: 200 })
+}
+
+// Process in background worker
+emailQueue.process('process-email', async (job) => {
+  const { emailId, from, subject } = job.data
+  
+  // Heavy processing here
+  await analyzeEmailWithAI(emailId)
+  await createTicket(from, subject)
+  await sendNotifications(emailId)
+  
+  console.log(`✅ Processed email ${emailId}`)
+})
+```
+
+### Error Handling
+
+```typescript
+export async function POST(request: Request) {
+  try {
+    // Verify and process
+    const isValid = await verifyWebhookFromHeaders(request.headers, inbound)
+    if (!isValid) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+    
+    const payload: InboundWebhookPayload = await request.json()
+    
+    // Your processing logic
+    await processEmail(payload.email)
+    
+    return new Response('OK', { status: 200 })
+  } catch (error) {
+    // Log error but still return 200 to prevent retries
+    // (if the error is in your code, retrying won't help)
+    console.error('Webhook processing error:', error)
+    
+    // Or return 500 to trigger retry if it's a transient error
+    // (e.g., database connection issue)
+    if (isTransientError(error)) {
+      return new Response('Retry', { status: 500 })
+    }
+    
+    return new Response('OK', { status: 200 })
+  }
+}
+```
+
+<Accordion title="FAQ">
+  <AccordionItem title="What happens if my webhook endpoint is down?">
+    Inbound will retry the webhook up to 3 times with exponential backoff. If all retries fail, the delivery is marked as failed and you can view the error in the endpoint deliveries. The email is still stored and can be retrieved via the API.
+  </AccordionItem>
+
+  <AccordionItem title="Can I change the webhook URL without losing emails?">
+    Yes! Update the endpoint configuration with the new URL. Emails already in the system will be delivered to the new URL on the next retry attempt.
+  </AccordionItem>
+
+  <AccordionItem title="How do I test my webhook locally?">
+    Use a tunneling service like ngrok:
+    ```bash
+    ngrok http 3000
+    # Use the https://xxx.ngrok.io URL as your webhook endpoint
+    ```
+    Or use the endpoint test feature to send test payloads.
+  </AccordionItem>
+
+  <AccordionItem title="What's the difference between parsedData and cleanedContent?">
+    - `parsedData`: Raw parsed email data with all headers and content
+    - `cleanedContent`: Sanitized HTML (removes scripts, styles) and cleaned text
+    
+    Use `cleanedContent` for displaying email content in your UI.
+  </AccordionItem>
+
+  <AccordionItem title="How long are attachment download URLs valid?">
+    Attachment download URLs are valid for the lifetime of the email. They require API key authentication, so they're secure even if shared.
+  </AccordionItem>
+
+  <AccordionItem title="Can I use the same webhook endpoint for multiple email addresses?">
+    Yes! The webhook payload includes the `endpoint` object with the endpoint details, and the `email.recipient` field tells you which specific address received the email.
+  </AccordionItem>
+</Accordion>
+
+## Testing Webhooks
+
+Use the endpoint test feature to verify your webhook:
+
+```typescript
+// Test with real webhook payload
+const testResult = await inbound.endpoints.test('endp_xyz789', {
+  webhookFormat: 'inbound' // Uses production-like payload
+})
+
+console.log(testResult)
+// {
+//   success: true,
+//   message: 'Webhook responded successfully (200)',
+//   responseTime: 245,
+//   statusCode: 200,
+//   responseBody: 'OK',
+//   webhookFormat: 'inbound',
+//   testPayload: { /* full test email payload */ }
+// }
+```
+
+The test endpoint sends a realistic webhook payload to your URL, allowing you to verify:
+- Webhook URL is accessible
+- Verification token is correct
+- Your handler processes the payload correctly
+- Response time is acceptable
+
+## Next Steps
+
+- [Create endpoints](/concepts/endpoints) to configure webhook delivery
+- [Set up email addresses](/concepts/email-addresses) to route emails to webhooks
+- [View the webhook API reference](/api-reference/webhooks) for complete payload documentation

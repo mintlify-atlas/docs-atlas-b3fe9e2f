@@ -1,0 +1,498 @@
+---
+title: 'Email Addresses'
+description: 'Manage individual email addresses and routing'
+---
+
+## Create Email Address
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/email-addresses \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "address": "support@example.com",
+    "domainId": "dom_abc123",
+    "endpointId": "ep_xyz789",
+    "isActive": true
+  }'
+```
+
+```typescript TypeScript SDK
+import { Inbound } from '@inbound/sdk'
+
+const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
+
+const emailAddress = await inbound.emailAddresses.create({
+  address: 'support@example.com',
+  domainId: 'dom_abc123',
+  endpointId: 'ep_xyz789',
+  isActive: true
+})
+```
+</CodeGroup>
+
+### POST `/api/e2/email-addresses`
+
+Create a new email address for an authenticated user's domain, optionally routing to a webhook or endpoint.
+
+#### Request Parameters
+
+<ParamField path="address" type="string" required>
+  Complete email address (e.g., `support@example.com`).
+  
+  Must match valid email format and belong to the specified domain.
+</ParamField>
+
+<ParamField path="domainId" type="string" required>
+  ID of the verified domain this email address belongs to.
+</ParamField>
+
+<ParamField path="endpointId" type="string">
+  ID of the endpoint to route emails to. Mutually exclusive with `webhookId`.
+</ParamField>
+
+<ParamField path="webhookId" type="string">
+  ID of the webhook to route emails to. Mutually exclusive with `endpointId`.
+</ParamField>
+
+<ParamField path="isActive" type="boolean" default="true">
+  Whether the email address is active and should receive emails.
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the email address.
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  The email address.
+</ResponseField>
+
+<ResponseField name="domainId" type="string">
+  ID of the parent domain.
+</ResponseField>
+
+<ResponseField name="webhookId" type="string">
+  ID of the configured webhook (if any).
+</ResponseField>
+
+<ResponseField name="endpointId" type="string">
+  ID of the configured endpoint (if any).
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the email address is active.
+</ResponseField>
+
+<ResponseField name="isReceiptRuleConfigured" type="boolean">
+  Whether AWS SES receipt rule is configured for this address.
+</ResponseField>
+
+<ResponseField name="receiptRuleName" type="string">
+  Name of the AWS SES receipt rule.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the email address was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the email address was last updated.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  ID of the user who owns this email address.
+</ResponseField>
+
+<ResponseField name="domain" type="object">
+  Domain reference object.
+  
+  <Expandable title="Domain Object">
+    <ResponseField name="id" type="string">
+      Domain ID.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Domain name.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Domain verification status.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="routing" type="object">
+  Routing configuration.
+  
+  <Expandable title="Routing Object">
+    <ResponseField name="type" type="string">
+      Routing type: `webhook`, `endpoint`, or `none`.
+    </ResponseField>
+    
+    <ResponseField name="id" type="string">
+      ID of the webhook or endpoint.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Name of the webhook or endpoint.
+    </ResponseField>
+    
+    <ResponseField name="config" type="object">
+      Configuration details of the routing destination.
+    </ResponseField>
+    
+    <ResponseField name="isActive" type="boolean">
+      Whether the routing destination is active.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="warning" type="string">
+  Warning message if AWS configuration is incomplete.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "id": "addr_abc123",
+  "address": "support@example.com",
+  "domainId": "dom_abc123",
+  "webhookId": null,
+  "endpointId": "ep_xyz789",
+  "isActive": true,
+  "isReceiptRuleConfigured": true,
+  "receiptRuleName": "batch-rule-001",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z",
+  "userId": "usr_abc123",
+  "domain": {
+    "id": "dom_abc123",
+    "name": "example.com",
+    "status": "verified"
+  },
+  "routing": {
+    "type": "endpoint",
+    "id": "ep_xyz789",
+    "name": "Support Webhook",
+    "config": {
+      "url": "https://api.example.com/webhooks/email"
+    },
+    "isActive": true
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## List Email Addresses
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/email-addresses?domainId=dom_abc123&limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const emailAddresses = await inbound.emailAddresses.list({
+  domainId: 'dom_abc123',
+  limit: 50
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/email-addresses`
+
+Get paginated list of email addresses for authenticated user with optional filtering by domain, active status, and receipt rule configuration.
+
+#### Query Parameters
+
+<ParamField query="limit" type="integer" default="50">
+  Maximum number of email addresses to return (1-100).
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of email addresses to skip for pagination.
+</ParamField>
+
+<ParamField query="domainId" type="string">
+  Filter by domain ID.
+</ParamField>
+
+<ParamField query="isActive" type="string">
+  Filter by active status: `true` or `false`.
+</ParamField>
+
+<ParamField query="isReceiptRuleConfigured" type="string">
+  Filter by receipt rule configuration: `true` or `false`.
+</ParamField>
+
+#### Response
+
+<ResponseField name="data" type="array">
+  Array of email address objects (same structure as Create Email Address response).
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+  
+  <Expandable title="Pagination Object">
+    <ResponseField name="limit" type="number">
+      Number of results per page.
+    </ResponseField>
+    
+    <ResponseField name="offset" type="number">
+      Number of results skipped.
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching email addresses.
+    </ResponseField>
+    
+    <ResponseField name="hasMore" type="boolean">
+      Whether there are more results available.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "addr_abc123",
+      "address": "support@example.com",
+      "domainId": "dom_abc123",
+      "webhookId": null,
+      "endpointId": "ep_xyz789",
+      "isActive": true,
+      "isReceiptRuleConfigured": true,
+      "receiptRuleName": "batch-rule-001",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z",
+      "userId": "usr_abc123",
+      "domain": {
+        "id": "dom_abc123",
+        "name": "example.com",
+        "status": "verified"
+      },
+      "routing": {
+        "type": "endpoint",
+        "id": "ep_xyz789",
+        "name": "Support Webhook",
+        "config": {
+          "url": "https://api.example.com/webhooks/email"
+        },
+        "isActive": true
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1,
+    "hasMore": false
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Email Address
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const emailAddress = await inbound.emailAddresses.get('addr_abc123')
+```
+</CodeGroup>
+
+### GET `/api/e2/email-addresses/:id`
+
+Get a specific email address by ID with detailed information including routing configuration.
+
+#### Response
+
+Same structure as Create Email Address response.
+
+<ResponseExample>
+```json Response
+{
+  "id": "addr_abc123",
+  "address": "support@example.com",
+  "domainId": "dom_abc123",
+  "webhookId": null,
+  "endpointId": "ep_xyz789",
+  "isActive": true,
+  "isReceiptRuleConfigured": true,
+  "receiptRuleName": "batch-rule-001",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z",
+  "userId": "usr_abc123",
+  "domain": {
+    "id": "dom_abc123",
+    "name": "example.com",
+    "status": "verified"
+  },
+  "routing": {
+    "type": "endpoint",
+    "id": "ep_xyz789",
+    "name": "Support Webhook",
+    "config": {
+      "url": "https://api.example.com/webhooks/email"
+    },
+    "isActive": true
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Update Email Address
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "endpointId": "ep_new789",
+    "isActive": true
+  }'
+```
+
+```typescript TypeScript SDK
+const emailAddress = await inbound.emailAddresses.update('addr_abc123', {
+  endpointId: 'ep_new789',
+  isActive: true
+})
+```
+</CodeGroup>
+
+### PATCH `/api/e2/email-addresses/:id`
+
+Update an email address's routing configuration and active status.
+
+#### Request Parameters
+
+<ParamField path="endpointId" type="string">
+  ID of the endpoint to route emails to. Set to `null` to remove endpoint routing.
+</ParamField>
+
+<ParamField path="webhookId" type="string">
+  ID of the webhook to route emails to. Set to `null` to remove webhook routing.
+</ParamField>
+
+<ParamField path="isActive" type="boolean">
+  Whether the email address should be active and receive emails.
+</ParamField>
+
+#### Response
+
+Same structure as Create Email Address response.
+
+<ResponseExample>
+```json Response
+{
+  "id": "addr_abc123",
+  "address": "support@example.com",
+  "domainId": "dom_abc123",
+  "webhookId": null,
+  "endpointId": "ep_new789",
+  "isActive": true,
+  "isReceiptRuleConfigured": true,
+  "receiptRuleName": "batch-rule-001",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:35:00Z",
+  "userId": "usr_abc123",
+  "domain": {
+    "id": "dom_abc123",
+    "name": "example.com",
+    "status": "verified"
+  },
+  "routing": {
+    "type": "endpoint",
+    "id": "ep_new789",
+    "name": "New Support Webhook",
+    "config": {
+      "url": "https://api.example.com/webhooks/new-email"
+    },
+    "isActive": true
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Delete Email Address
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.inbound.new/api/e2/email-addresses/addr_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const result = await inbound.emailAddresses.delete('addr_abc123')
+```
+</CodeGroup>
+
+### DELETE `/api/e2/email-addresses/:id`
+
+Delete an email address. The address will no longer receive emails.
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message about the deletion result.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  ID of the deleted email address.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Email address deleted successfully",
+  "id": "addr_abc123"
+}
+```
+</ResponseExample>
+
+---
+
+## Validation Rules
+
+### Email Address Format
+- Must be a valid email format: `username@domain.com`
+- Domain must match the specified `domainId`
+- Must be unique across the platform
+
+### Routing Configuration
+- Only one routing method can be active: either `endpointId` OR `webhookId`
+- The specified endpoint or webhook must:
+  - Belong to the same user
+  - Be active
+  - Exist in the system
+
+### Domain Requirements
+- Parent domain must be:
+  - Owned by the user
+  - In `verified` status
+  - Have DNS records properly configured

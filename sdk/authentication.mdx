@@ -1,0 +1,434 @@
+---
+title: 'Authentication'
+description: 'Secure your API requests with API key authentication'
+---
+
+## Overview
+
+Inbound uses API key authentication to secure all API requests. Your API key is a secret credential that identifies your account and should be kept secure.
+
+## Getting Your API Key
+
+1. Sign up or log in at [inbound.new](https://inbound.new)
+2. Navigate to **Settings** → **API Keys**
+3. Create a new API key or copy an existing one
+4. Store it securely in your environment variables
+
+<Warning>
+Never commit API keys to version control or expose them in client-side code.
+</Warning>
+
+## Setting Up Authentication
+
+### Using Environment Variables
+
+Store your API key in environment variables:
+
+<Tabs>
+  <Tab title=".env">
+    ```bash
+    INBOUND_API_KEY=ib_live_1234567890abcdef
+    ```
+  </Tab>
+  
+  <Tab title=".env.local (Next.js)">
+    ```bash
+    INBOUND_API_KEY=ib_live_1234567890abcdef
+    ```
+  </Tab>
+  
+  <Tab title="Vercel">
+    Add environment variable in:
+    **Project Settings** → **Environment Variables**
+    
+    ```
+    Name: INBOUND_API_KEY
+    Value: ib_live_1234567890abcdef
+    ```
+  </Tab>
+  
+  <Tab title="Docker">
+    ```bash
+    docker run -e INBOUND_API_KEY=ib_live_1234567890abcdef myapp
+    ```
+  </Tab>
+</Tabs>
+
+### SDK Authentication
+
+Initialize the SDK with your API key:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+// Load from environment variable
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+// Or pass directly (not recommended for production)
+const inbound = new Inbound('ib_live_1234567890abcdef')
+```
+
+### Direct API Authentication
+
+Include your API key in the `Authorization` header:
+
+```typescript
+const response = await fetch('https://api.inbound.new/api/e2/emails', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ /* ... */ })
+})
+```
+
+## Bearer Token Format
+
+API keys must be sent as Bearer tokens in the Authorization header:
+
+```
+Authorization: Bearer ib_live_1234567890abcdef
+```
+
+<Note>
+The `Bearer` prefix is required. Requests without it will return a 401 Unauthorized error.
+</Note>
+
+## API Key Types
+
+Inbound provides different API key types for different environments:
+
+### Live Keys
+
+```
+ib_live_...
+```
+
+- Used in production environments
+- Sends real emails
+- Processes actual webhook events
+- Charges apply to your account
+
+### Test Keys
+
+```
+ib_test_...
+```
+
+- Used in development and testing
+- Simulates email sending (no actual emails sent)
+- Webhook events can be triggered manually
+- No charges applied
+
+<Tabs>
+  <Tab title="Development">
+    ```bash
+    # .env.development
+    INBOUND_API_KEY=ib_test_1234567890abcdef
+    ```
+  </Tab>
+  
+  <Tab title="Production">
+    ```bash
+    # .env.production
+    INBOUND_API_KEY=ib_live_1234567890abcdef
+    ```
+  </Tab>
+</Tabs>
+
+## Security Best Practices
+
+### 1. Never Expose API Keys
+
+<Warning>
+**Never** include API keys in:
+- Client-side JavaScript
+- Mobile app code
+- Public repositories
+- Browser requests
+- Frontend environment variables
+</Warning>
+
+```typescript
+// ❌ BAD - Exposed in client-side code
+const inbound = new Inbound('ib_live_1234567890abcdef')
+
+// ✅ GOOD - Server-side only
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+```
+
+### 2. Use Environment Variables
+
+Always load API keys from environment variables:
+
+```typescript
+// ✅ GOOD
+const apiKey = process.env.INBOUND_API_KEY
+if (!apiKey) {
+  throw new Error('INBOUND_API_KEY is not set')
+}
+const inbound = new Inbound(apiKey)
+```
+
+### 3. Separate Keys by Environment
+
+Use different API keys for development, staging, and production:
+
+```typescript
+// config.ts
+export const config = {
+  apiKey: process.env.INBOUND_API_KEY!,
+  environment: process.env.NODE_ENV
+}
+
+// Verify correct key type
+if (config.environment === 'production' && config.apiKey.startsWith('ib_test_')) {
+  throw new Error('Cannot use test API key in production!')
+}
+```
+
+### 4. Rotate Keys Regularly
+
+1. Create a new API key in the dashboard
+2. Update your environment variables
+3. Deploy the changes
+4. Delete the old API key
+
+<Note>
+Rotate API keys every 90 days or immediately if you suspect a key has been compromised.
+</Note>
+
+### 5. Limit Key Permissions
+
+When creating API keys, specify the minimum required permissions:
+
+- **Read-only**: For analytics and monitoring
+- **Send-only**: For transactional email services
+- **Full access**: For administrative tasks
+
+### 6. Use Server-Side API Routes
+
+For Next.js applications, always call Inbound from server-side routes:
+
+```typescript
+// app/api/send-email/route.ts
+import { Inbound } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  const { to, subject, html } = await request.json()
+  
+  const email = await inbound.emails.send({
+    from: 'noreply@yourdomain.com',
+    to,
+    subject,
+    html
+  })
+  
+  return NextResponse.json({ success: true, emailId: email.id })
+}
+```
+
+## Rate Limiting
+
+API requests are rate-limited based on your plan:
+
+| Plan | Rate Limit |
+|------|------------|
+| Free | 10 requests/second |
+| Starter | 50 requests/second |
+| Pro | 100 requests/second |
+| Enterprise | Custom |
+
+### Handling Rate Limits
+
+```typescript
+try {
+  const email = await inbound.emails.send({ /* ... */ })
+} catch (error) {
+  if (error.status === 429) {
+    // Rate limit exceeded
+    const retryAfter = error.headers.get('Retry-After')
+    console.log(`Rate limited. Retry after ${retryAfter} seconds`)
+    
+    // Wait and retry
+    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000))
+    // Retry the request
+  }
+}
+```
+
+<Note>
+The `Retry-After` header indicates how many seconds to wait before retrying.
+</Note>
+
+## Authentication Errors
+
+### 401 Unauthorized
+
+Returned when the API key is missing, invalid, or expired:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+**Common causes:**
+- API key is missing from the Authorization header
+- API key format is incorrect
+- API key has been deleted or revoked
+- Bearer prefix is missing
+
+**Solution:**
+
+```typescript
+// Check your API key
+const apiKey = process.env.INBOUND_API_KEY
+console.log('API Key:', apiKey ? 'Set' : 'Missing')
+console.log('Starts with:', apiKey?.substring(0, 8))
+
+// Verify authorization header format
+const headers = {
+  'Authorization': `Bearer ${apiKey}`, // Must include "Bearer "
+  'Content-Type': 'application/json'
+}
+```
+
+### 403 Forbidden
+
+Returned when the API key lacks required permissions:
+
+```json
+{
+  "error": "You don't have permission to send from domain: example.com"
+}
+```
+
+**Common causes:**
+- Domain is not verified
+- Domain belongs to another user
+- API key has restricted permissions
+
+**Solution:**
+1. Verify domain ownership in the dashboard
+2. Check DNS records are correctly configured
+3. Ensure API key has the required permissions
+
+## Testing Authentication
+
+Verify your API key is working:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+async function testAuthentication() {
+  try {
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+    
+    // Try to list domains
+    const domains = await inbound.domains.list()
+    
+    console.log('✅ Authentication successful')
+    console.log(`Found ${domains.length} domains`)
+  } catch (error) {
+    if (error.status === 401) {
+      console.error('❌ Authentication failed: Invalid API key')
+    } else {
+      console.error('❌ Error:', error.message)
+    }
+  }
+}
+
+testAuthentication()
+```
+
+## Environment Management
+
+### Local Development
+
+```bash
+# .env.local
+INBOUND_API_KEY=ib_test_1234567890abcdef
+NODE_ENV=development
+```
+
+### CI/CD Pipelines
+
+Add secrets to your CI/CD environment:
+
+<Tabs>
+  <Tab title="GitHub Actions">
+    ```yaml
+    # .github/workflows/deploy.yml
+    name: Deploy
+    
+    on:
+      push:
+        branches: [main]
+    
+    jobs:
+      deploy:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v2
+          - name: Deploy
+            env:
+              INBOUND_API_KEY: ${{ secrets.INBOUND_API_KEY }}
+            run: npm run deploy
+    ```
+  </Tab>
+  
+  <Tab title="GitLab CI">
+    ```yaml
+    # .gitlab-ci.yml
+    deploy:
+      stage: deploy
+      script:
+        - npm run deploy
+      variables:
+        INBOUND_API_KEY: $INBOUND_API_KEY
+      only:
+        - main
+    ```
+  </Tab>
+  
+  <Tab title="CircleCI">
+    ```yaml
+    # .circleci/config.yml
+    version: 2.1
+    
+    jobs:
+      deploy:
+        docker:
+          - image: node:18
+        steps:
+          - checkout
+          - run:
+              name: Deploy
+              command: npm run deploy
+        environment:
+          INBOUND_API_KEY: ${INBOUND_API_KEY}
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/sdk/error-handling">
+    Learn how to handle authentication and other errors
+  </Card>
+  <Card title="TypeScript SDK" icon="code" href="/sdk/typescript">
+    Explore the full SDK reference
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api-reference/webhooks">
+    Configure webhooks for receiving emails
+  </Card>
+  <Card title="Rate Limits" icon="gauge" href="/api-reference/rate-limits">
+    Understand rate limits and best practices
+  </Card>
+</CardGroup>

@@ -1,0 +1,538 @@
+---
+title: "Better Auth Integration"
+description: "Automatically send transactional emails for authentication events with Better Auth"
+icon: "shield"
+---
+
+<Warning>
+This plugin is in beta and may not be stable.
+</Warning>
+
+The Inbound Better Auth plugin automatically sends transactional emails for important authentication events like password changes, new device sign-ins, and account creation.
+
+## Overview
+
+Better Auth is a modern authentication library for TypeScript applications. The Inbound plugin integrates seamlessly to handle all your auth-related email notifications without writing any email code.
+
+**What you get:**
+- Automatic emails for auth events (password changes, new logins, etc.)
+- Beautiful, responsive email templates
+- Full customization support
+- Type-safe configuration
+- React Email template support
+- Organization and social account event support
+
+## Installation
+
+The plugin is included in the `inboundemail` package in version `0.20.0` and above. You'll also need `better-auth` installed:
+
+```bash npm
+npm install inboundemail better-auth
+```
+
+```bash bun
+bun add inboundemail better-auth
+```
+
+```bash pnpm
+pnpm add inboundemail better-auth
+```
+
+## Quick Start
+
+### Server Setup
+
+```typescript
+import { betterAuth } from 'better-auth';
+import { inboundEmailPlugin } from 'inboundemail/better-auth';
+
+export const auth = betterAuth({
+  // ... your Better Auth config
+  plugins: [
+    inboundEmailPlugin({
+      client: { apiKey: process.env.INBOUND_API_KEY! },
+      from: 'security@yourdomain.com',
+    }),
+  ],
+});
+```
+
+### Client Setup (Optional)
+
+For proper type inference on the client side:
+
+```typescript
+import { createAuthClient } from 'better-auth/react';
+import { inboundEmailClientPlugin } from 'inboundemail/better-auth/client';
+
+export const authClient = createAuthClient({
+  plugins: [inboundEmailClientPlugin()],
+});
+```
+
+## Supported Events
+
+The plugin automatically sends emails for these authentication events:
+
+### Core Authentication Events
+
+| Event | Description | Default |
+|-------|-------------|---------||
+| `password-changed` | User changed their password | Enabled |
+| `email-changed` | User changed their email address | Enabled |
+| `new-device-sign-in` | Sign-in from a new device/browser | Enabled |
+| `account-created` | New account registration | Enabled |
+| `password-reset-requested` | Password reset was requested | Disabled |
+| `two-factor-enabled` | 2FA was enabled on account | Enabled |
+| `two-factor-disabled` | 2FA was disabled on account | Enabled |
+
+### Organization Events
+
+| Event | Description | Default |
+|-------|-------------|---------||
+| `organization-invitation-sent` | User invited to organization | Enabled |
+| `organization-invitation-accepted` | User accepted invitation | Enabled |
+| `organization-member-removed` | User removed from organization | Enabled |
+| `organization-role-changed` | Member role updated | Enabled |
+
+### Social Account Events
+
+| Event | Description | Default |
+|-------|-------------|---------||
+| `social-account-linked` | OAuth account connected | Enabled |
+| `social-account-unlinked` | OAuth account disconnected | Enabled |
+
+## Configuration Options
+
+```typescript
+inboundEmailPlugin({
+  // Required: Inbound client or API key
+  client: { apiKey: process.env.INBOUND_API_KEY! },
+  // Or pass an existing client instance:
+  // client: new Inbound({ apiKey: '...' }),
+
+  // Required: Default "from" address for all emails
+  from: 'security@yourdomain.com',
+
+  // Optional: Include device info in new sign-in emails (default: true)
+  includeDeviceInfo: true,
+
+  // Optional: Configure specific events
+  events: {
+    'password-changed': {
+      enabled: true,
+      from: 'alerts@yourdomain.com', // Override from address
+      template: customTemplate, // Custom template function
+    },
+    'password-reset-requested': {
+      enabled: true, // Enable this disabled-by-default event
+    },
+  },
+
+  // Optional: Lifecycle hooks
+  onBeforeSend: async (event, context, email) => {
+    // Return false to cancel sending
+    return true;
+  },
+  onAfterSend: async (event, context, result) => {
+    console.log(`Sent ${event} email:`, result.id);
+  },
+  onError: async (event, context, error) => {
+    console.error(`Failed to send ${event} email:`, error);
+  },
+});
+```
+
+## Custom Templates
+
+You can customize the email content for any event type:
+
+```typescript
+inboundEmailPlugin({
+  client: { apiKey: process.env.INBOUND_API_KEY! },
+  from: 'security@yourdomain.com',
+  events: {
+    'password-changed': {
+      template: (ctx) => ({
+        subject: `🔐 Password Changed - ${ctx.timestamp}`,
+        html: `
+          <h1>Password Updated</h1>
+          <p>Hi ${ctx.name || 'there'},</p>
+          <p>Your password was changed on ${new Date(ctx.timestamp).toLocaleString()}.</p>
+          ${ctx.otherSessionsRevoked ? '<p>All other sessions have been signed out.</p>' : ''}
+          <p>If this wasn't you, please contact support immediately.</p>
+        `,
+        text: `Hi ${ctx.name || 'there'}, your password was changed...`,
+      }),
+    },
+  },
+});
+```
+
+## Template Context by Event Type
+
+Each event type receives different context data:
+
+<AccordionGroup>
+  <Accordion title="password-changed">
+    ```typescript
+    {
+      email: string;
+      name?: string | null;
+      userId: string;
+      timestamp: string; // ISO 8601
+      otherSessionsRevoked: boolean;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="email-changed">
+    ```typescript
+    {
+      email: string; // Old email (notification sent here)
+      name?: string | null;
+      userId: string;
+      timestamp: string;
+      oldEmail: string;
+      newEmail: string;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="new-device-sign-in">
+    ```typescript
+    {
+      email: string;
+      name?: string | null;
+      userId: string;
+      timestamp: string;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+      device?: {
+        browser?: string;  // e.g., "Chrome", "Safari"
+        os?: string;       // e.g., "macOS", "Windows"
+        type?: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+      };
+      location?: {
+        city?: string;
+        country?: string;
+      };
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="account-created">
+    ```typescript
+    {
+      email: string;
+      name?: string | null;
+      userId: string;
+      timestamp: string;
+      method: 'email' | 'social' | 'magic-link' | 'passkey';
+      provider?: string; // e.g., "google", "github" for social
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="organization-invitation-sent">
+    ```typescript
+    {
+      email: string; // Invitee's email
+      inviterName?: string | null;
+      inviterEmail?: string | null;
+      organizationName: string;
+      organizationId: string;
+      role: string;
+      inviteLink?: string;
+      timestamp: string;
+      expiresAt?: string;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="social-account-linked">
+    ```typescript
+    {
+      email: string;
+      name?: string | null;
+      userId: string;
+      providerName: string; // e.g., "Google", "GitHub"
+      providerId: string;   // e.g., "google", "github"
+      providerAccountId?: string;
+      timestamp: string;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Pre-built React Email Templates
+
+The SDK includes beautiful, responsive React Email templates for all auth events. Install `@react-email/components` to use them:
+
+```bash npm
+npm install @react-email/components
+```
+
+```bash bun
+bun add @react-email/components
+```
+
+Then import and use the pre-built templates:
+
+```tsx
+import { inboundEmailPlugin } from 'inboundemail/better-auth';
+import {
+  BetterAuthPasswordChanged,
+  BetterAuthEmailChanged,
+  BetterAuthNewDeviceSignin,
+  BetterAuthMagicLink,
+  BetterAuthPasswordReset,
+  BetterAuthVerifyEmail,
+} from 'inboundemail/better-auth/react-email';
+
+inboundEmailPlugin({
+  client: { apiKey: process.env.INBOUND_API_KEY! },
+  from: 'security@yourdomain.com',
+  events: {
+    'password-changed': {
+      template: (ctx) => ({
+        subject: 'Your password was changed',
+        react: (
+          <BetterAuthPasswordChanged
+            userEmail={ctx.email}
+            timestamp={new Date(ctx.timestamp).toLocaleString()}
+            appName="My App"
+            supportEmail="support@myapp.com"
+          />
+        ),
+      }),
+    },
+    'new-device-sign-in': {
+      template: (ctx) => ({
+        subject: 'New sign-in detected',
+        react: (
+          <BetterAuthNewDeviceSignin
+            userEmail={ctx.email}
+            deviceInfo={{
+              browser: ctx.device?.browser,
+              os: ctx.device?.os,
+              ipAddress: ctx.ipAddress ?? undefined,
+              timestamp: new Date(ctx.timestamp).toLocaleString(),
+            }}
+            appName="My App"
+          />
+        ),
+      }),
+    },
+  },
+});
+```
+
+### Available Templates
+
+<CardGroup cols={2}>
+  <Card title="BetterAuthPasswordChanged" icon="lock">
+    Password change notification with timestamp and security link
+  </Card>
+  
+  <Card title="BetterAuthEmailChanged" icon="envelope">
+    Email change notification with old/new addresses and revert link
+  </Card>
+  
+  <Card title="BetterAuthNewDeviceSignin" icon="devices">
+    New device login alert with device info and location
+  </Card>
+  
+  <Card title="BetterAuthMagicLink" icon="wand-magic-sparkles">
+    Magic link sign-in with expiration time
+  </Card>
+  
+  <Card title="BetterAuthPasswordReset" icon="key">
+    Password reset email with secure reset link
+  </Card>
+  
+  <Card title="BetterAuthVerifyEmail" icon="circle-check">
+    Email verification with OTP code
+  </Card>
+  
+  <Card title="BetterAuthOrganizationInvitation" icon="building">
+    Organization invitation with role and expiration
+  </Card>
+  
+  <Card title="BetterAuthSocialAccountLinked" icon="link">
+    Social account connection notification
+  </Card>
+</CardGroup>
+
+### Customizing the Design System
+
+The `betterAuthDesignSystem` export provides a complete design token system you can use for consistent styling:
+
+```typescript
+import { betterAuthDesignSystem } from 'inboundemail/better-auth/react-email';
+
+const ds = betterAuthDesignSystem;
+
+// Colors
+ds.colors.background.outside    // '#FFFFFF' - outer background
+ds.colors.background.inside     // '#FFFFFF' - inner background
+ds.colors.text.primary          // '#121212' - headings
+ds.colors.text.secondary        // '#444444' - body text
+
+// Typography
+ds.typography.fontFamily.sans   // 'Gesit, Inter, -apple-system, ...'
+ds.typography.heading           // { fontSize: '20px', fontWeight: 600, ... }
+ds.typography.body              // { fontSize: '14px', fontWeight: 400, ... }
+
+// Spacing
+ds.spacing.xs  // '4px'
+ds.spacing.sm  // '8px'
+ds.spacing.md  // '12px'
+ds.spacing.lg  // '16px'
+ds.spacing.xl  // '24px'
+```
+
+## How It Works
+
+The plugin uses Better Auth's `after` hooks to intercept successful authentication operations:
+
+- **Password changes**: Hooks into `/change-password` endpoint
+- **Email changes**: Hooks into `/change-email` endpoint  
+- **Sign-ins**: Hooks into `/sign-in/email`, `/sign-in/social`, `/sign-in/magic-link`, `/sign-in/passkey`
+- **Sign-ups**: Hooks into `/sign-up/email`, `/sign-up/social`
+- **2FA changes**: Hooks into `/two-factor/enable`, `/two-factor/disable`
+
+New device detection works by tracking unique combinations of IP address and user agent per user. The first sign-in from a new device/browser triggers a notification email.
+
+## Disabling Events
+
+To disable specific events:
+
+```typescript
+inboundEmailPlugin({
+  client: { apiKey: process.env.INBOUND_API_KEY! },
+  from: 'security@yourdomain.com',
+  events: {
+    'account-created': { enabled: false },
+    'new-device-sign-in': { enabled: false },
+  },
+});
+```
+
+## TypeScript Support
+
+All types are exported for full TypeScript support:
+
+```typescript
+import type {
+  InboundEmailPluginOptions,
+  AuthEventType,
+  AuthEventContext,
+  EmailContent,
+  EmailTemplateFunction,
+  PasswordChangedContext,
+  EmailChangedContext,
+  NewDeviceSignInContext,
+  AccountCreatedContext,
+} from 'inboundemail/better-auth';
+```
+
+## Example: Complete Setup
+
+Here's a complete example with custom templates and lifecycle hooks:
+
+```typescript
+import { betterAuth } from 'better-auth';
+import { inboundEmailPlugin } from 'inboundemail/better-auth';
+import {
+  BetterAuthPasswordChanged,
+  BetterAuthNewDeviceSignin,
+} from 'inboundemail/better-auth/react-email';
+
+export const auth = betterAuth({
+  database: {
+    // your database config
+  },
+  plugins: [
+    inboundEmailPlugin({
+      client: { apiKey: process.env.INBOUND_API_KEY! },
+      from: 'security@myapp.com',
+      includeDeviceInfo: true,
+      
+      events: {
+        'password-changed': {
+          template: (ctx) => ({
+            subject: 'Password Changed - Action Required',
+            react: (
+              <BetterAuthPasswordChanged
+                userEmail={ctx.email}
+                timestamp={new Date(ctx.timestamp).toLocaleString()}
+                appName="MyApp"
+                supportEmail="support@myapp.com"
+                logoUrl="https://myapp.com/logo.png"
+              />
+            ),
+          }),
+        },
+        
+        'new-device-sign-in': {
+          template: (ctx) => ({
+            subject: 'New Sign-In Detected',
+            react: (
+              <BetterAuthNewDeviceSignin
+                userEmail={ctx.email}
+                deviceInfo={{
+                  browser: ctx.device?.browser,
+                  os: ctx.device?.os,
+                  ipAddress: ctx.ipAddress ?? undefined,
+                  timestamp: new Date(ctx.timestamp).toLocaleString(),
+                }}
+                appName="MyApp"
+                supportEmail="support@myapp.com"
+              />
+            ),
+          }),
+        },
+        
+        // Disable account creation emails
+        'account-created': { enabled: false },
+      },
+      
+      onBeforeSend: async (event, context, email) => {
+        console.log(`Sending ${event} email to ${context.email}`);
+        return true; // Allow sending
+      },
+      
+      onAfterSend: async (event, context, result) => {
+        console.log(`Successfully sent ${event} email:`, result.id);
+        // Track analytics, log to monitoring, etc.
+      },
+      
+      onError: async (event, context, error) => {
+        console.error(`Failed to send ${event} email:`, error);
+        // Alert your error tracking service
+      },
+    }),
+  ],
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Better Auth Docs" icon="book" href="https://www.better-auth.com">
+    Learn more about Better Auth
+  </Card>
+  
+  <Card title="React Email" icon="react" href="https://react.email">
+    Explore React Email templates
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    View the full Inbound API
+  </Card>
+  
+  <Card title="Email Best Practices" icon="lightbulb" href="/guides/sending-emails">
+    Learn email deliverability tips
+  </Card>
+</CardGroup>

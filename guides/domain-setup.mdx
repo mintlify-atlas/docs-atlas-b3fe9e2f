@@ -1,0 +1,371 @@
+---
+title: 'Domain Setup'
+description: 'Step-by-step guide to verifying your domain for sending and receiving emails'
+---
+
+## Overview
+
+Before you can send or receive emails from your domain, you need to verify ownership by adding DNS records. This guide walks you through the complete setup process.
+
+## Why Verify Your Domain?
+
+- **Send emails** from your own domain (e.g., `hello@yourdomain.com`)
+- **Receive emails** at any address on your domain
+- **Improve deliverability** with proper SPF, DKIM, and DMARC records
+- **Build trust** with recipients by using your branded domain
+
+## Setup Process
+
+<Steps>
+  <Step title="Add Your Domain">
+    ```javascript
+    import { Inbound } from 'inboundemail'
+    
+    const inbound = new Inbound(process.env.INBOUND_API_KEY)
+    
+    const domain = await inbound.domains.create({
+      domain: 'yourdomain.com'
+    })
+    
+    console.log('Domain added:', domain.id)
+    console.log('Status:', domain.status) // "pending"
+    ```
+    
+    The domain is created with `status: "pending"` and you'll receive DNS records to configure.
+  </Step>
+  
+  <Step title="Get DNS Records">
+    ```javascript
+    const domain = await inbound.domains.get('dom_abc123')
+    
+    console.log('DNS Records:')
+    console.log('MX:', domain.mx_records)
+    console.log('TXT:', domain.txt_records)
+    console.log('DKIM:', domain.dkim_records)
+    ```
+    
+    Inbound provides three types of records:
+    - **MX records** - For receiving emails
+    - **TXT records** - For SPF verification
+    - **DKIM records** - For email authentication
+  </Step>
+  
+  <Step title="Configure DNS">
+    Add the records to your DNS provider (see examples below).
+    
+    <Warning>
+      **DNS propagation can take up to 48 hours**, though it usually happens within minutes to hours.
+    </Warning>
+  </Step>
+  
+  <Step title="Verify Domain">
+    ```javascript
+    const result = await inbound.domains.verify('dom_abc123')
+    
+    if (result.status === 'verified') {
+      console.log('Domain verified!')
+    } else {
+      console.log('Verification pending')
+      console.log('Details:', result.verification_details)
+    }
+    ```
+    
+    You can also wait for automatic verification (happens every 30 minutes).
+  </Step>
+  
+  <Step title="Start Using Your Domain">
+    Once verified, you can:
+    - Send emails from any address on your domain
+    - Create email addresses to receive mail
+    - Reply to incoming emails
+  </Step>
+</Steps>
+
+## DNS Record Examples
+
+After adding your domain, you'll receive DNS records like these:
+
+### MX Records
+
+```
+Type: MX
+Name: @ (or yourdomain.com)
+Priority: 10
+Value: inbound-smtp.inbound.new
+```
+
+### SPF Record (TXT)
+
+```
+Type: TXT
+Name: @ (or yourdomain.com)
+Value: v=spf1 include:inbound.new ~all
+```
+
+### DKIM Records (TXT)
+
+You'll receive 3 DKIM records:
+
+```
+Type: TXT
+Name: inbound1._domainkey.yourdomain.com
+Value: k=rsa; p=MIGfMA0GCSqGSIb3DQEBA...
+
+Type: TXT
+Name: inbound2._domainkey.yourdomain.com
+Value: k=rsa; p=MIGfMA0GCSqGSIb3DQEBA...
+
+Type: TXT
+Name: inbound3._domainkey.yourdomain.com
+Value: k=rsa; p=MIGfMA0GCSqGSIb3DQEBA...
+```
+
+## DNS Provider Guides
+
+### Cloudflare
+
+<Steps>
+  <Step title="Open DNS Settings">
+    1. Log in to Cloudflare
+    2. Select your domain
+    3. Go to **DNS** → **Records**
+  </Step>
+  
+  <Step title="Add MX Record">
+    1. Click **Add record**
+    2. Type: **MX**
+    3. Name: **@**
+    4. Mail server: **inbound-smtp.inbound.new**
+    5. Priority: **10**
+    6. Click **Save**
+  </Step>
+  
+  <Step title="Add TXT Records">
+    Add SPF record:
+    1. Click **Add record**
+    2. Type: **TXT**
+    3. Name: **@**
+    4. Content: **v=spf1 include:inbound.new ~all**
+    5. Click **Save**
+    
+    Add DKIM records (repeat 3 times):
+    1. Click **Add record**
+    2. Type: **TXT**
+    3. Name: **inbound1._domainkey** (then inbound2, inbound3)
+    4. Content: Copy from Inbound dashboard
+    5. Click **Save**
+  </Step>
+</Steps>
+
+### Namecheap
+
+<Steps>
+  <Step title="Open Advanced DNS">
+    1. Log in to Namecheap
+    2. Go to **Domain List**
+    3. Click **Manage** next to your domain
+    4. Select **Advanced DNS** tab
+  </Step>
+  
+  <Step title="Add MX Record">
+    1. Click **Add New Record**
+    2. Type: **MX Record**
+    3. Host: **@**
+    4. Value: **inbound-smtp.inbound.new**
+    5. Priority: **10**
+    6. Click **Save**
+  </Step>
+  
+  <Step title="Add TXT Records">
+    Follow same pattern as Cloudflare, using Namecheap's **TXT Record** option.
+  </Step>
+</Steps>
+
+### GoDaddy
+
+<Steps>
+  <Step title="Open DNS Management">
+    1. Log in to GoDaddy
+    2. Go to **My Products**
+    3. Click **DNS** next to your domain
+  </Step>
+  
+  <Step title="Add Records">
+    Use the **Add** button to add each MX and TXT record as specified above.
+  </Step>
+</Steps>
+
+### Google Domains / Squarespace Domains
+
+<Steps>
+  <Step title="Access DNS Settings">
+    1. Log in to Google Domains
+    2. Click your domain
+    3. Go to **DNS** in left sidebar
+  </Step>
+  
+  <Step title="Add Custom Records">
+    Scroll to **Custom resource records** and add each record.
+  </Step>
+</Steps>
+
+## Verification Status
+
+Check verification status programmatically:
+
+```javascript
+const domain = await inbound.domains.get('dom_abc123')
+
+console.log('Domain:', domain.domain)
+console.log('Status:', domain.status)
+
+if (domain.status === 'pending') {
+  console.log('Verification Details:')
+  console.log('MX:', domain.verification_details?.mx_verified ? '✓' : '✗')
+  console.log('SPF:', domain.verification_details?.spf_verified ? '✓' : '✗')
+  console.log('DKIM:', domain.verification_details?.dkim_verified ? '✓' : '✗')
+}
+```
+
+Status values:
+- `pending` - DNS records not yet detected
+- `verified` - All records verified, ready to use
+- `failed` - Verification failed (check DNS records)
+
+## Subdomain Support
+
+You can verify a root domain and automatically use subdomains:
+
+```javascript
+// Verify root domain
+await inbound.domains.create({ domain: 'company.com' })
+
+// Automatically works for subdomains
+await inbound.emails.send({
+  from: 'support@help.company.com',  // Subdomain
+  to: 'user@example.com',
+  subject: 'Hello',
+  text: 'This works automatically!'
+})
+```
+
+Or verify a subdomain independently:
+
+```javascript
+await inbound.domains.create({ domain: 'mail.company.com' })
+```
+
+## Troubleshooting
+
+### Domain Not Verifying
+
+<AccordionGroup>
+  <Accordion title="Check DNS Propagation">
+    Use online tools to verify your DNS records are live:
+    - [DNS Checker](https://dnschecker.org)
+    - [MXToolbox](https://mxtoolbox.com)
+    - [Google DNS Lookup](https://dns.google.com)
+    
+    Enter your domain and check for:
+    - MX record pointing to `inbound-smtp.inbound.new`
+    - TXT record with SPF value
+    - DKIM TXT records
+  </Accordion>
+  
+  <Accordion title="DNS Syntax Errors">
+    Common mistakes:
+    - **Extra periods**: Don't add trailing dots (`.`) unless your DNS provider requires it
+    - **Wrong host value**: Use `@` for root domain, not `yourdomain.com`
+    - **DKIM name format**: Should be `inbound1._domainkey` not `inbound1._domainkey.yourdomain.com`
+    - **Priority not set**: MX records need priority `10`
+  </Accordion>
+  
+  <Accordion title="Conflicting Records">
+    Remove or update existing records:
+    - **Old MX records**: Remove previous email provider MX records
+    - **Multiple SPF records**: Only one SPF record allowed per domain
+    - **Conflicting TXT**: If you have existing SPF, merge with: `v=spf1 include:existing.com include:inbound.new ~all`
+  </Accordion>
+  
+  <Accordion title="DNS Provider Issues">
+    Some providers have quirks:
+    - **Cloudflare**: Turn off email routing if enabled
+    - **GoDaddy**: May take longer to propagate (up to 24 hours)
+    - **Namecheap**: Ensure "Email Forwarding" is disabled
+    - **Route53**: Check TTL is reasonable (300-3600 seconds)
+  </Accordion>
+</AccordionGroup>
+
+### Manual Verification
+
+Check your DNS records from command line:
+
+```bash
+# Check MX records
+dig yourdomain.com MX +short
+
+# Check SPF record
+dig yourdomain.com TXT +short | grep spf
+
+# Check DKIM
+dig inbound1._domainkey.yourdomain.com TXT +short
+```
+
+Expected output:
+```
+# MX
+10 inbound-smtp.inbound.new.
+
+# SPF
+"v=spf1 include:inbound.new ~all"
+
+# DKIM
+"k=rsa; p=MIGfMA0GCSqGSIb..."
+```
+
+### Still Having Issues?
+
+```javascript
+// Get detailed verification info
+const domain = await inbound.domains.get('dom_abc123')
+console.log(JSON.stringify(domain.verification_details, null, 2))
+```
+
+This shows exactly which records are missing or incorrect.
+
+## DMARC (Optional)
+
+For additional email security, add a DMARC record:
+
+```
+Type: TXT
+Name: _dmarc.yourdomain.com
+Value: v=DMARC1; p=none; rua=mailto:dmarc@yourdomain.com
+```
+
+This is optional but recommended for production use.
+
+## Best Practices
+
+1. **Verify domains before going live** - Test email sending after verification
+2. **Keep records updated** - Don't remove DNS records after verification
+3. **Monitor deliverability** - Use tags to track bounce rates
+4. **Use subdomains** - Consider `mail.yourdomain.com` for transactional emails
+5. **Set up DMARC** - Improves deliverability and security
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sending Emails" icon="paper-plane" href="/guides/sending-emails">
+    Start sending from your verified domain
+  </Card>
+  <Card title="Email Addresses" icon="at" href="/api-reference/email-addresses">
+    Create addresses to receive mail
+  </Card>
+  <Card title="Webhook Setup" icon="webhook" href="/guides/receiving-emails">
+    Configure webhooks for inbound mail
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/domains">
+    View full domains API documentation
+  </Card>
+</CardGroup>

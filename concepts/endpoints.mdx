@@ -1,0 +1,629 @@
+---
+title: "Endpoints"
+description: "Understanding the unified endpoint system for webhooks, email forwards, and email groups"
+---
+
+## Overview
+
+Endpoints are the unified way to handle incoming emails in Inbound. Instead of managing separate webhooks, email forwards, and distribution lists, endpoints provide a single interface for all email routing. An endpoint can be a webhook that receives HTTP POST requests, an email forward that relays messages, or an email group that distributes to multiple recipients.
+
+<Info>
+Endpoints replace the legacy webhook system and provide:
+- **Webhooks** - Send email data to your HTTP endpoint
+- **Email forwards** - Forward emails to another address
+- **Email groups** - Distribute emails to multiple recipients
+</Info>
+
+## Schema Definition
+
+From the database schema (`lib/db/schema.ts:386-397`):
+
+```typescript
+export const endpoints = pgTable('endpoints', {
+  id: varchar('id', { length: 255 }).primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  type: varchar('type', { length: 50 }).notNull(), // 'webhook', 'email', 'email_group'
+  webhookFormat: varchar('webhook_format', { length: 50 }).default('inbound'),
+  config: text('config').notNull(), // JSON configuration based on type
+  isActive: boolean('is_active').default(true),
+  description: text('description'),
+  userId: varchar('user_id', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+```
+
+## Endpoint Types
+
+### Webhook Endpoints
+
+Webhook endpoints receive HTTP POST requests with email data:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+// Create webhook endpoint
+const endpoint = await inbound.endpoints.create({
+  name: 'Support Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://yourapp.com/api/webhook/email',
+    timeout: 30,        // seconds (default: 30, max: 120)
+    retryAttempts: 3,   // number of retries (default: 3, max: 10)
+    headers: {          // optional custom headers
+      'X-Custom-Header': 'value',
+      'X-Team': 'support'
+    }
+  },
+  description: 'Handles support emails via webhook'
+})
+
+console.log(endpoint)
+// {
+//   id: 'endp_xyz789',
+//   name: 'Support Webhook',
+//   type: 'webhook',
+//   config: {
+//     url: 'https://yourapp.com/api/webhook/email',
+//     timeout: 30,
+//     retryAttempts: 3,
+//     headers: { 'X-Custom-Header': 'value' },
+//     verificationToken: 'tok_abc123def456...' // auto-generated
+//   },
+//   isActive: true,
+//   createdAt: '2024-01-15T10:30:00Z'
+// }
+```
+
+### Email Forward Endpoints
+
+Email forward endpoints relay emails to another address:
+
+```typescript
+// Create email forward endpoint
+const forwardEndpoint = await inbound.endpoints.create({
+  name: 'Forward to Gmail',
+  type: 'email',
+  config: {
+    forwardTo: 'myemail@gmail.com',
+    preserveHeaders: true // keeps original From, To, etc.
+  },
+  description: 'Forwards to personal Gmail account'
+})
+
+// Emails will be forwarded with:
+// - Original subject line
+// - Original body (HTML + text)
+// - Original attachments
+// - Original headers (if preserveHeaders: true)
+```
+
+### Email Group Endpoints
+
+Email group endpoints distribute emails to multiple recipients:
+
+```typescript
+// Create email group endpoint
+const groupEndpoint = await inbound.endpoints.create({
+  name: 'Team Distribution',
+  type: 'email_group',
+  config: {
+    emails: [
+      'alice@company.com',
+      'bob@company.com',
+      'charlie@company.com'
+    ],
+    preserveHeaders: true
+  },
+  description: 'Distributes to entire support team'
+})
+
+// Each recipient gets a copy of the email
+// Maximum 50 recipients per group
+```
+
+## Creating Endpoints
+
+From the implementation (`app/api/e2/endpoints/create.ts:94-212`):
+
+### Using the SDK
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+// Webhook endpoint
+const webhook = await inbound.endpoints.create({
+  name: 'Production Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://api.yourapp.com/inbound/emails',
+    timeout: 45,
+    retryAttempts: 5,
+    headers: {
+      'X-Environment': 'production',
+      'X-Version': '2.0'
+    }
+  }
+})
+
+// Email forward endpoint
+const forward = await inbound.endpoints.create({
+  name: 'Fallback Forward',
+  type: 'email',
+  config: {
+    forwardTo: 'backup@company.com',
+    preserveHeaders: false // sends as new email from your domain
+  }
+})
+
+// Email group endpoint
+const group = await inbound.endpoints.create({
+  name: 'Executive Team',
+  type: 'email_group',
+  config: {
+    emails: [
+      'ceo@company.com',
+      'cto@company.com',
+      'cfo@company.com'
+    ]
+  }
+})
+```
+
+### Direct API Request
+
+```bash
+curl -X POST https://inbound.new/api/e2/endpoints \
+  -H "Authorization: Bearer ${INBOUND_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Webhook",
+    "type": "webhook",
+    "config": {
+      "url": "https://api.yourapp.com/inbound/emails",
+      "timeout": 30,
+      "retryAttempts": 3
+    },
+    "description": "Main production webhook for email processing"
+  }'
+```
+
+<Note>
+Webhook endpoints automatically receive a `verificationToken` in their config. This token is used to verify webhook requests are coming from Inbound. Store it securely!
+</Note>
+
+## Configuration Validation
+
+From the implementation (`app/api/e2/endpoints/validation.ts`):
+
+```typescript
+// Webhook config validation
+{
+  url: string,              // Must be https:// (or http:// for localhost)
+  timeout?: number,         // 1-300 seconds
+  retryAttempts?: number,   // 0-10
+  headers?: Record<string, string> // Optional custom headers
+}
+
+// Email forward config validation
+{
+  forwardTo: string,        // Valid email address
+  preserveHeaders?: boolean // Default: false
+}
+
+// Email group config validation
+{
+  emails: string[],         // Array of 1-50 valid email addresses
+  preserveHeaders?: boolean // Default: false
+}
+```
+
+Validation errors:
+
+```typescript
+// Invalid URL
+{
+  error: 'Invalid configuration',
+  details: 'Webhook URL must be a valid HTTPS URL'
+}
+
+// Too many recipients
+{
+  error: 'Invalid configuration',
+  details: 'Email group can have maximum 50 recipients'
+}
+
+// Invalid email format
+{
+  error: 'Invalid configuration',
+  details: 'Invalid email address in group: not-an-email'
+}
+```
+
+## Testing Endpoints
+
+From the implementation (`app/api/e2/endpoints/test.ts:261-645`):
+
+```typescript
+// Test webhook endpoint with realistic payload
+const testResult = await inbound.endpoints.test('endp_xyz789', {
+  webhookFormat: 'inbound', // 'inbound', 'discord', or 'slack'
+  overrideUrl: 'https://webhook.site/xyz' // optional: test different URL
+})
+
+console.log(testResult)
+// {
+//   success: true,
+//   message: 'Webhook responded successfully (200)',
+//   responseTime: 245,      // milliseconds
+//   statusCode: 200,
+//   responseBody: 'OK',
+//   webhookFormat: 'inbound',
+//   urlTested: 'https://yourapp.com/api/webhook/email',
+//   testPayload: {
+//     event: 'email.received',
+//     timestamp: '2024-01-15T10:30:00Z',
+//     email: {
+//       id: 'inbnd_test_abc123',
+//       messageId: '<test-msg@mail.inbound.new>',
+//       from: {
+//         text: 'Inbound Test <test@example.com>',
+//         addresses: [{ name: 'Inbound Test', address: 'test@example.com' }]
+//       },
+//       subject: 'Test Email - Inbound Email Service',
+//       // ... complete test payload
+//     }
+//   }
+// }
+```
+
+### Test Payload Structure
+
+From the implementation (`app/api/e2/endpoints/test.ts:66-205`), test payloads are production-realistic:
+
+```typescript
+// The test endpoint sends a real InboundWebhookPayload
+{
+  event: 'email.received',
+  timestamp: '2024-01-15T10:30:00Z',
+  email: {
+    id: 'inbnd_test_abc123',
+    messageId: '<test-msg@mail.inbound.new>',
+    from: {
+      text: 'Inbound Test <test@example.com>',
+      addresses: [{ name: 'Inbound Test', address: 'test@example.com' }]
+    },
+    to: {
+      text: 'test@yourdomain.com',
+      addresses: [{ name: null, address: 'test@yourdomain.com' }]
+    },
+    recipient: 'test@yourdomain.com',
+    subject: 'Test Email - Inbound Email Service',
+    receivedAt: '2024-01-15T10:30:00Z',
+    threadId: null,
+    threadPosition: null,
+    parsedData: {
+      messageId: '<test-msg@mail.inbound.new>',
+      date: new Date('2024-01-15T10:30:00Z'),
+      subject: 'Test Email - Inbound Email Service',
+      from: { /* ... */ },
+      to: { /* ... */ },
+      cc: null,
+      bcc: null,
+      replyTo: null,
+      textBody: 'This is a test email.\nRendered for webhook testing.',
+      htmlBody: '<div><p>This is a test email.</p><p><strong>Rendered for webhook testing.</strong></p></div>',
+      raw: 'From: Inbound Test <test@example.com>\r\n...',
+      attachments: [],
+      headers: { /* complete header object */ },
+      priority: undefined
+    },
+    cleanedContent: {
+      html: '<div><p>This is a test email.</p><p><strong>Rendered for webhook testing.</strong></p></div>',
+      text: 'This is a test email.\nRendered for webhook testing.',
+      hasHtml: true,
+      hasText: true,
+      attachments: [],
+      headers: { /* ... */ }
+    }
+  },
+  endpoint: {
+    id: 'endp_xyz789',
+    name: 'Production Webhook',
+    type: 'webhook'
+  }
+}
+```
+
+<Tip>
+**Test endpoint features:**
+- Sends production-like webhook payloads
+- Includes verification token in headers
+- Measures response time
+- Shows HTTP status code and response body
+- Supports testing with override URL (for webhook.site, ngrok, etc.)
+- Works with webhook, email, and email_group types
+</Tip>
+
+## Webhook vs Email vs Email Group
+
+| Feature | Webhook | Email Forward | Email Group |
+|---------|---------|---------------|-------------|
+| **Purpose** | Process emails programmatically | Forward to single address | Distribute to multiple addresses |
+| **Configuration** | URL + timeout + headers | Email address | Array of email addresses |
+| **Use Cases** | API integrations, automation | Personal email, backup | Team aliases, distribution lists |
+| **Processing** | HTTP POST with JSON | Email relay | Email relay to multiple |
+| **Max Recipients** | N/A | 1 | 50 |
+| **Custom Logic** | Yes (in your code) | No | No |
+| **Response Time** | Configurable (1-120s) | N/A | N/A |
+| **Retries** | Yes (0-10 attempts) | No | No |
+| **Headers** | Customizable | Preservable | Preservable |
+| **Verification** | Token-based | N/A | N/A |
+
+## Listing Endpoints
+
+```typescript
+// List all endpoints
+const endpoints = await inbound.endpoints.list({
+  limit: 50,
+  offset: 0
+})
+
+// Filter by type
+const webhooks = await inbound.endpoints.list({
+  type: 'webhook'
+})
+
+// Filter by active status
+const activeEndpoints = await inbound.endpoints.list({
+  isActive: true
+})
+
+console.log(endpoints)
+// {
+//   data: [
+//     {
+//       id: 'endp_xyz789',
+//       name: 'Production Webhook',
+//       type: 'webhook',
+//       config: { url: '...', timeout: 30 },
+//       isActive: true,
+//       deliveryStats: {
+//         total: 142,
+//         successful: 138,
+//         failed: 4,
+//         lastDelivery: '2024-01-15T10:30:00Z'
+//       },
+//       createdAt: '2024-01-01T00:00:00Z'
+//     }
+//   ],
+//   pagination: { limit: 50, offset: 0, total: 12, hasMore: false }
+// }
+```
+
+## Updating Endpoints
+
+```typescript
+// Update webhook URL
+const updated = await inbound.endpoints.update('endp_xyz789', {
+  config: {
+    url: 'https://new-api.yourapp.com/webhooks/email',
+    timeout: 45,
+    retryAttempts: 5
+  }
+})
+
+// Disable endpoint temporarily
+const disabled = await inbound.endpoints.update('endp_xyz789', {
+  isActive: false
+})
+
+// Update email group members
+const updatedGroup = await inbound.endpoints.update('endp_abc123', {
+  config: {
+    emails: [
+      'alice@company.com',
+      'bob@company.com',
+      'newmember@company.com' // added
+    ]
+  }
+})
+```
+
+<Warning>
+Updating an endpoint's config will affect ALL email addresses that route to it. If you need different behavior, create a new endpoint instead.
+</Warning>
+
+## Monitoring Endpoint Deliveries
+
+```typescript
+// List deliveries for an endpoint
+const deliveries = await inbound.endpoints.listDeliveries('endp_xyz789', {
+  limit: 20,
+  status: 'failed' // 'pending', 'success', 'failed'
+})
+
+for (const delivery of deliveries.data) {
+  console.log(`📧 Email ${delivery.emailId}:`, {
+    status: delivery.status,
+    attempts: delivery.attempts,
+    lastAttempt: delivery.lastAttemptAt,
+    responseData: delivery.responseData
+  })
+}
+
+// Example failed delivery
+{
+  id: 'del_def456',
+  emailId: 'inbnd_abc123',
+  endpointId: 'endp_xyz789',
+  deliveryType: 'webhook',
+  status: 'failed',
+  attempts: 3,
+  lastAttemptAt: '2024-01-15T10:32:00Z',
+  responseData: {
+    error: 'Request timeout after 30s',
+    statusCode: null
+  },
+  createdAt: '2024-01-15T10:30:00Z'
+}
+```
+
+## Common Patterns
+
+### Multi-Environment Setup
+
+```typescript
+// Development webhook
+const devWebhook = await inbound.endpoints.create({
+  name: 'Development Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://dev-api.yourapp.com/webhooks/email',
+    timeout: 60, // longer timeout for debugging
+    headers: { 'X-Environment': 'development' }
+  }
+})
+
+// Production webhook
+const prodWebhook = await inbound.endpoints.create({
+  name: 'Production Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://api.yourapp.com/webhooks/email',
+    timeout: 30,
+    retryAttempts: 5,
+    headers: { 'X-Environment': 'production' }
+  }
+})
+
+// Create separate email addresses for each
+await inbound.emailAddresses.create({
+  address: 'dev@yourdomain.com',
+  domainId: domain.id,
+  endpointId: devWebhook.id
+})
+
+await inbound.emailAddresses.create({
+  address: 'support@yourdomain.com',
+  domainId: domain.id,
+  endpointId: prodWebhook.id
+})
+```
+
+### Hybrid Webhook + Forward
+
+```typescript
+// Create webhook for processing
+const webhook = await inbound.endpoints.create({
+  name: 'Processing Webhook',
+  type: 'webhook',
+  config: { url: 'https://api.yourapp.com/emails' }
+})
+
+// Create forward for backup
+const forward = await inbound.endpoints.create({
+  name: 'Backup Forward',
+  type: 'email',
+  config: { forwardTo: 'backup@company.com' }
+})
+
+// Route primary address to webhook
+await inbound.emailAddresses.create({
+  address: 'support@yourdomain.com',
+  domainId: domain.id,
+  endpointId: webhook.id
+})
+
+// Route backup address to forward
+await inbound.emailAddresses.create({
+  address: 'support-backup@yourdomain.com',
+  domainId: domain.id,
+  endpointId: forward.id
+})
+```
+
+### Testing with Override URL
+
+```typescript
+// Test webhook with webhook.site
+const test1 = await inbound.endpoints.test('endp_xyz789', {
+  overrideUrl: 'https://webhook.site/abc123'
+})
+
+// Test with ngrok (local development)
+const test2 = await inbound.endpoints.test('endp_xyz789', {
+  overrideUrl: 'https://abc123.ngrok.io/api/webhook'
+})
+
+// Test with different webhook format
+const test3 = await inbound.endpoints.test('endp_xyz789', {
+  webhookFormat: 'slack' // Sends Slack-compatible payload
+})
+```
+
+<Accordion title="FAQ">
+  <AccordionItem title="What's the difference between endpoints and legacy webhooks?">
+    Endpoints are the new unified system that supports webhooks, email forwards, and email groups in a single interface. Legacy webhooks (`webhooks` table) are deprecated but still supported for backward compatibility. Always use endpoints for new integrations.
+  </AccordionItem>
+
+  <AccordionItem title="Can I use the same endpoint for multiple email addresses?">
+    Yes! This is the recommended approach. Create one endpoint and route multiple email addresses to it. The webhook payload includes `email.recipient` so you know which address received the email.
+  </AccordionItem>
+
+  <AccordionItem title="What happens if my webhook endpoint returns a 500 error?">
+    Inbound will retry the webhook delivery up to 3 times (configurable) with exponential backoff. If all retries fail, the delivery is marked as failed. The email is still stored and can be retrieved via the API.
+  </AccordionItem>
+
+  <AccordionItem title="Can I change a webhook endpoint to an email forward endpoint?">
+    No, you cannot change an endpoint's type after creation. Create a new endpoint with the desired type and update your email addresses to route to the new endpoint.
+  </AccordionItem>
+
+  <AccordionItem title="How do I rotate my verification token?">
+    Update the endpoint config with a new `verificationToken`. Inbound will use the new token for future webhook deliveries. Make sure to update your webhook handler to accept the new token.
+  </AccordionItem>
+
+  <AccordionItem title="Can email group recipients see each other?">
+    Yes, all recipients are in the To: field by default. If you need BCC behavior (hidden recipients), use multiple email forward endpoints instead.
+  </AccordionItem>
+</Accordion>
+
+## Best Practices
+
+<Info>
+**Endpoint Organization**
+- Use descriptive names that indicate purpose ("Production Webhook", "Team Distribution")
+- Create separate endpoints for different environments (dev, staging, prod)
+- Use endpoint descriptions to document integration details
+- Monitor delivery stats to detect issues early
+- Test endpoints before routing production traffic
+</Info>
+
+<Warning>
+**Webhook Configuration**
+- Always use HTTPS URLs (never HTTP in production)
+- Set appropriate timeouts (30s default, up to 120s for heavy processing)
+- Configure retry attempts based on your reliability needs
+- Use custom headers for environment/version tracking
+- Store verification tokens securely (environment variables)
+</Warning>
+
+<Tip>
+**Performance Tips**
+- Return 200 OK quickly from webhooks (< 1s ideal)
+- Use background jobs for heavy processing
+- Configure longer timeouts only when necessary
+- Monitor endpoint deliveries for patterns
+- Use the test feature to verify changes before deploying
+</Tip>
+
+## Next Steps
+
+- [Learn about webhook payloads](/concepts/webhooks)
+- [Create email addresses](/concepts/email-addresses) to route to endpoints
+- [View the endpoint API reference](/api-reference/endpoints)
+- [Test your endpoints](/api-reference/endpoints)

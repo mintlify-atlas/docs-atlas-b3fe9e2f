@@ -1,0 +1,688 @@
+---
+title: "Migrating from Resend"
+description: "Complete guide to migrating from Resend to Inbound with API compatibility and code examples"
+icon: "arrows-turn-right"
+---
+
+Inbound provides a Resend-compatible API, making migration straightforward. This guide covers everything you need to know to switch from Resend to Inbound.
+
+## Why Migrate to Inbound?
+
+<CardGroup cols={2}>
+  <Card title="Two-Way Email" icon="arrows-left-right">
+    Not just sending - receive emails and trigger webhooks in your app
+  </Card>
+  
+  <Card title="Email Threading" icon="comments">
+    Automatic conversation tracking with full thread support
+  </Card>
+  
+  <Card title="MCP Integration" icon="robot">
+    Connect AI assistants directly to your email infrastructure
+  </Card>
+  
+  <Card title="Better Auth Plugin" icon="shield">
+    Built-in authentication email support with React templates
+  </Card>
+</CardGroup>
+
+## Migration Steps
+
+<Steps>
+  <Step title="Install Inbound SDK">
+    Replace the Resend package with Inbound:
+    
+    ```bash npm
+    npm uninstall resend
+    npm install inboundemail
+    ```
+    
+    ```bash bun
+    bun remove resend
+    bun add inboundemail
+    ```
+    
+    ```bash pnpm
+    pnpm remove resend
+    pnpm add inboundemail
+    ```
+  </Step>
+  
+  <Step title="Get Your Inbound API Key">
+    Sign up at [inbound.new](https://inbound.new) and generate an API key from your dashboard.
+    
+    <Card title="Dashboard" icon="key" href="https://inbound.new/settings">
+      Get your API key
+    </Card>
+  </Step>
+  
+  <Step title="Update Your Code">
+    Update your imports and initialization:
+    
+    **Before (Resend):**
+    ```typescript
+    import { Resend } from 'resend';
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    ```
+    
+    **After (Inbound):**
+    ```typescript
+    import { Inbound } from 'inboundemail';
+    const inbound = new Inbound(process.env.INBOUND_API_KEY);
+    ```
+  </Step>
+  
+  <Step title="Update API Calls">
+    Update your email sending calls (minimal changes required):
+    
+    **Before (Resend):**
+    ```typescript
+    await resend.emails.send({
+      from: 'hello@example.com',
+      to: 'user@example.com',
+      subject: 'Hello',
+      html: '<p>World</p>'
+    });
+    ```
+    
+    **After (Inbound):**
+    ```typescript
+    await inbound.emails.send({
+      from: 'hello@example.com',
+      to: 'user@example.com',
+      subject: 'Hello',
+      html: '<p>World</p>'
+    });
+    ```
+  </Step>
+  
+  <Step title="Verify Domain DNS">
+    Add your domain to Inbound and update DNS records:
+    
+    ```typescript
+    const domain = await inbound.domains.create({
+      domain: 'example.com'
+    });
+    
+    console.log('Add these DNS records:', domain.dnsRecords);
+    ```
+    
+    You'll need to update your DNS records from Resend's to Inbound's. Both use similar SPF, DKIM, and DMARC records.
+  </Step>
+  
+  <Step title="Test Your Integration">
+    Send a test email to verify everything works:
+    
+    ```typescript
+    const { data, error } = await inbound.emails.send({
+      from: 'test@example.com',
+      to: 'you@example.com',
+      subject: 'Test Email',
+      html: '<p>If you receive this, migration is successful!</p>'
+    });
+    
+    if (error) {
+      console.error('Error:', error);
+    } else {
+      console.log('Success! Email ID:', data?.id);
+    }
+    ```
+  </Step>
+</Steps>
+
+## API Compatibility Comparison
+
+### Sending Emails
+
+<Note>
+Inbound's API is intentionally designed to be compatible with Resend for easy migration.
+</Note>
+
+| Feature | Resend | Inbound | Notes |
+|---------|--------|---------|-------|
+| Basic send | ✅ | ✅ | Identical API |
+| HTML content | ✅ | ✅ | Identical API |
+| Plain text | ✅ | ✅ | Identical API |
+| Multiple recipients | ✅ | ✅ | Identical API |
+| CC/BCC | ✅ | ✅ | Identical API |
+| Attachments | ✅ | ✅ | Identical API |
+| Custom headers | ✅ | ✅ | Identical API |
+| Tags | ✅ | ✅ | Identical API |
+| Scheduled emails | ✅ | ✅ | Identical API |
+| React Email | ✅ | ✅ | Same `react` prop |
+
+### Code Examples: Side by Side
+
+<CodeGroup>
+```typescript Resend
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Basic send
+await resend.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Hello',
+  html: '<p>World</p>'
+});
+
+// With attachments
+await resend.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Invoice',
+  html: '<p>See attached</p>',
+  attachments: [
+    {
+      filename: 'invoice.pdf',
+      content: base64Content
+    }
+  ]
+});
+
+// With React Email
+await resend.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Welcome',
+  react: <WelcomeEmail name="John" />
+});
+```
+
+```typescript Inbound
+import { Inbound } from 'inboundemail';
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY);
+
+// Basic send (identical)
+await inbound.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Hello',
+  html: '<p>World</p>'
+});
+
+// With attachments (identical)
+await inbound.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Invoice',
+  html: '<p>See attached</p>',
+  attachments: [
+    {
+      filename: 'invoice.pdf',
+      content: base64Content
+    }
+  ]
+});
+
+// With React Email (identical)
+await inbound.emails.send({
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Welcome',
+  react: <WelcomeEmail name="John" />
+});
+```
+</CodeGroup>
+
+## Feature Parity
+
+### Features Available in Both
+
+<CardGroup cols={2}>
+  <Card title="Transactional Emails" icon="paper-plane">
+    Send one-off emails with full HTML/text support
+  </Card>
+  
+  <Card title="Attachments" icon="paperclip">
+    Support for file attachments with base64 or URL
+  </Card>
+  
+  <Card title="React Email" icon="react">
+    Use React components as email templates
+  </Card>
+  
+  <Card title="Email Scheduling" icon="clock">
+    Schedule emails for future delivery
+  </Card>
+  
+  <Card title="Custom Headers" icon="code">
+    Add custom SMTP headers
+  </Card>
+  
+  <Card title="Tags & Metadata" icon="tags">
+    Tag emails for analytics and filtering
+  </Card>
+  
+  <Card title="Domain Verification" icon="circle-check">
+    SPF, DKIM, DMARC support
+  </Card>
+  
+  <Card title="Webhooks" icon="webhook">
+    Delivery and bounce notifications
+  </Card>
+</CardGroup>
+
+### Inbound-Only Features
+
+These features are unique to Inbound:
+
+<CardGroup cols={2}>
+  <Card title="Receive Emails" icon="inbox">
+    Create email addresses that trigger webhooks when messages arrive
+  </Card>
+  
+  <Card title="Email Threading" icon="comments">
+    Automatic conversation tracking with thread IDs
+  </Card>
+  
+  <Card title="Reply to Emails" icon="reply">
+    Use `inbound.reply()` to respond to received emails
+  </Card>
+  
+  <Card title="Email Forwarding" icon="share">
+    Forward incoming emails to other addresses
+  </Card>
+  
+  <Card title="MCP Server" icon="robot">
+    Connect AI assistants to your email infrastructure
+  </Card>
+  
+  <Card title="Better Auth Plugin" icon="shield">
+    Built-in authentication emails with templates
+  </Card>
+  
+  <Card title="Email Parsing" icon="file-code">
+    Automatic HTML/text extraction and attachment handling
+  </Card>
+  
+  <Card title="Subdomains" icon="sitemap">
+    Automatic subdomain support for verified root domains
+  </Card>
+</CardGroup>
+
+## DNS Record Migration
+
+When migrating, you'll need to update your DNS records from Resend to Inbound.
+
+### Record Types
+
+Both platforms use similar DNS records:
+
+| Record Type | Purpose | Migration |
+|-------------|---------|------------|
+| SPF (TXT) | Sender authorization | Replace Resend's SPF with Inbound's |
+| DKIM (TXT) | Email signing | Add new DKIM keys from Inbound |
+| DMARC (TXT) | Email policy | Update if specific to Resend |
+| MX (for receiving) | Incoming email | Inbound only (new feature) |
+
+### Example DNS Update
+
+<Steps>
+  <Step title="Get Inbound DNS Records">
+    ```typescript
+    const domain = await inbound.domains.create({ domain: 'example.com' });
+    console.log(domain.dnsRecords);
+    ```
+  </Step>
+  
+  <Step title="Remove Old Resend Records">
+    Remove these from your DNS:
+    - `resend._domainkey.example.com` (DKIM)
+    - SPF record containing `include:resend.io`
+  </Step>
+  
+  <Step title="Add Inbound Records">
+    Add the DNS records provided by Inbound:
+    ```
+    TXT  _dkim.example.com  "v=DKIM1; k=rsa; p=..."
+    TXT  example.com        "v=spf1 include:inbound.new ~all"
+    MX   example.com        "inbound-in.net" (priority 10)
+    ```
+  </Step>
+  
+  <Step title="Verify Domain">
+    ```typescript
+    const domain = await inbound.domains.retrieve('dom_xxx');
+    console.log('Status:', domain.status); // Should be 'verified'
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+**Important:** Update one domain at a time and verify it works before migrating others. Keep Resend active until all domains are verified on Inbound.
+</Warning>
+
+## Code Changes Needed
+
+### Import Statements
+
+```typescript
+// Before
+import { Resend } from 'resend';
+
+// After
+import { Inbound } from 'inboundemail';
+```
+
+### Client Initialization
+
+```typescript
+// Before
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// After  
+const inbound = new Inbound(process.env.INBOUND_API_KEY);
+```
+
+### Sending Emails
+
+```typescript
+// Before
+await resend.emails.send({ /* ... */ });
+
+// After
+await inbound.emails.send({ /* ... */ }); // Same parameters!
+```
+
+### Environment Variables
+
+```bash
+# Before
+RESEND_API_KEY=re_xxxx
+
+# After
+INBOUND_API_KEY=inbound_xxxx
+```
+
+### Response Format
+
+The response format is slightly different:
+
+```typescript
+// Resend
+const { id } = await resend.emails.send({ /* ... */ });
+
+// Inbound
+const { data } = await inbound.emails.send({ /* ... */ });
+const id = data?.id;
+```
+
+## Field Name Differences
+
+<Note>
+Inbound uses snake_case for API fields to match OpenAPI standards, but the SDK accepts both formats for compatibility.
+</Note>
+
+| Resend (camelCase) | Inbound API (snake_case) | SDK Support |
+|--------------------|--------------------------|-------------|
+| `replyTo` | `reply_to` | Both accepted |
+| `scheduledAt` | `scheduled_at` | Both accepted |
+| `contentType` | `content_type` | Both accepted |
+
+The SDK automatically handles conversion, so you can use either format.
+
+## Testing Your Migration
+
+Use this checklist to verify your migration:
+
+<AccordionGroup>
+  <Accordion title="Send a basic email">
+    ```typescript
+    const { data, error } = await inbound.emails.send({
+      from: 'test@yourdomain.com',
+      to: 'you@example.com',
+      subject: 'Test',
+      html: '<p>Test email</p>'
+    });
+    
+    console.log('Success:', data?.id);
+    ```
+  </Accordion>
+  
+  <Accordion title="Send with attachments">
+    ```typescript
+    const { data, error } = await inbound.emails.send({
+      from: 'test@yourdomain.com',
+      to: 'you@example.com',
+      subject: 'Test with Attachment',
+      html: '<p>See attached</p>',
+      attachments: [{
+        filename: 'test.txt',
+        content: Buffer.from('Hello World').toString('base64')
+      }]
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Send with React Email">
+    ```typescript
+    import { WelcomeEmail } from './emails/welcome';
+    
+    const { data, error } = await inbound.emails.send({
+      from: 'hello@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Welcome!',
+      react: <WelcomeEmail name="John" />
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Verify domain">
+    ```typescript
+    const domains = await inbound.domains.list();
+    console.log('Domains:', domains.data);
+    
+    for (const domain of domains.data) {
+      console.log(`${domain.domain}: ${domain.status}`);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Common Migration Issues
+
+<AccordionGroup>
+  <Accordion title="Domain not verified">
+    **Problem:** Emails fail with "domain not verified" error.
+    
+    **Solution:** 
+    1. Check DNS records are properly set
+    2. Wait 24-48 hours for DNS propagation
+    3. Use `inbound.domains.retrieve(id)` to check status
+  </Accordion>
+  
+  <Accordion title="Rate limits">
+    **Problem:** Getting rate limit errors.
+    
+    **Solution:**
+    - Check your plan limits in the dashboard
+    - Implement exponential backoff
+    - Upgrade your plan if needed
+  </Accordion>
+  
+  <Accordion title="Attachment issues">
+    **Problem:** Attachments not working.
+    
+    **Solution:**
+    - Ensure content is base64 encoded
+    - Check file size limits (10MB per attachment)
+    - Verify `content_type` is specified
+  </Accordion>
+  
+  <Accordion title="API key errors">
+    **Problem:** Authentication failing.
+    
+    **Solution:**
+    - Verify API key is correct
+    - Check environment variable name changed from `RESEND_API_KEY` to `INBOUND_API_KEY`
+    - Regenerate API key if needed
+  </Accordion>
+</AccordionGroup>
+
+## Migration Checklist
+
+Use this checklist to ensure a smooth migration:
+
+- [ ] Sign up for Inbound account
+- [ ] Generate API key
+- [ ] Install `inboundemail` package
+- [ ] Update import statements
+- [ ] Update client initialization
+- [ ] Update environment variables
+- [ ] Add domains to Inbound
+- [ ] Update DNS records
+- [ ] Verify domains
+- [ ] Test basic email sending
+- [ ] Test with attachments
+- [ ] Test React Email templates
+- [ ] Update error handling
+- [ ] Test in staging environment
+- [ ] Monitor first production emails
+- [ ] Remove Resend package
+- [ ] Clean up old DNS records
+
+## Gradual Migration Strategy
+
+For large applications, consider a gradual migration:
+
+```typescript
+// Feature flag approach
+const USE_INBOUND = process.env.USE_INBOUND === 'true';
+
+const emailClient = USE_INBOUND
+  ? new Inbound(process.env.INBOUND_API_KEY)
+  : new Resend(process.env.RESEND_API_KEY);
+
+await emailClient.emails.send({
+  // Same API for both!
+  from: 'hello@example.com',
+  to: 'user@example.com',
+  subject: 'Hello',
+  html: '<p>World</p>'
+});
+```
+
+This allows you to:
+1. Test Inbound with a percentage of traffic
+2. Roll back quickly if issues arise
+3. Compare delivery metrics side-by-side
+
+## Beyond Migration: New Capabilities
+
+Once migrated, explore Inbound's unique features:
+
+### Receive Emails
+
+```typescript
+// Create an email address that triggers your webhook
+const emailAddress = await inbound.emailAddresses.create({
+  address: 'support@yourdomain.com',
+  webhookUrl: 'https://yourapp.com/webhook/email'
+});
+
+// Your webhook receives:
+// POST https://yourapp.com/webhook/email
+// {
+//   "email": {
+//     "id": "email_xxx",
+//     "from": { "address": "user@example.com", "name": "John" },
+//     "to": [{ "address": "support@yourdomain.com" }],
+//     "subject": "Help request",
+//     "text": "I need help with...",
+//     "html": "<p>I need help with...</p>"
+//   }
+// }
+```
+
+### Reply to Emails
+
+```typescript
+// In your webhook handler
+export async function POST(request: Request) {
+  const payload = await request.json();
+  
+  // Automatically reply to incoming emails
+  await inbound.reply(payload.email, {
+    from: 'support@yourdomain.com',
+    text: 'Thanks for reaching out! We\'ll respond within 24 hours.'
+  });
+  
+  return new Response('OK');
+}
+```
+
+### Email Threads
+
+```typescript
+// Get all emails in a conversation
+const thread = await inbound.mail.retrieve('thread_xxx');
+
+console.log('Conversation:', thread.emails);
+// Returns all emails in the thread, sorted chronologically
+```
+
+### MCP Integration
+
+```json
+// .cursor/mcp.json or opencode.json
+{
+  "mcpServers": {
+    "inbound": {
+      "type": "http",
+      "url": "https://mcp.inbound.new/mcp",
+      "headers": {
+        "x-inbound-api-key": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+Now your AI assistant can manage your emails!
+
+## Getting Help
+
+If you run into issues during migration:
+
+<CardGroup cols={2}>
+  <Card title="Documentation" icon="book" href="/api-reference/introduction">
+    Read the full API reference
+  </Card>
+  
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/inbound">
+    Join our Discord for support
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github" href="https://github.com/inboundemail/inbound-typescript-sdk/issues">
+    Report bugs or request features
+  </Card>
+  
+  <Card title="Email Support" icon="envelope" href="mailto:support@inbound.new">
+    Contact our support team
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+After completing your migration:
+
+<CardGroup cols={2}>
+  <Card title="Webhooks Guide" icon="webhook" href="/api-reference/webhooks">
+    Learn about webhook payloads and security
+  </Card>
+  
+  <Card title="Better Auth Plugin" icon="shield" href="/integrations/better-auth">
+    Add authentication emails
+  </Card>
+  
+  <Card title="MCP Integration" icon="robot" href="/integrations/mcp">
+    Connect AI assistants to your emails
+  </Card>
+  
+  <Card title="Best Practices" icon="lightbulb" href="/guides/sending-emails">
+    Email deliverability tips
+  </Card>
+</CardGroup>

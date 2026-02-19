@@ -1,0 +1,825 @@
+---
+title: 'Emails'
+description: 'Send, receive, and manage emails'
+---
+
+## Send Email
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/emails \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "hello@yourdomain.com",
+    "to": "recipient@example.com",
+    "subject": "Welcome to our service",
+    "html": "<h1>Welcome!</h1><p>Thanks for joining us.</p>",
+    "text": "Welcome! Thanks for joining us."
+  }'
+```
+
+```typescript TypeScript SDK
+import { Inbound } from '@inbound/sdk'
+
+const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
+
+const email = await inbound.emails.send({
+  from: 'hello@yourdomain.com',
+  to: 'recipient@example.com',
+  subject: 'Welcome to our service',
+  html: '<h1>Welcome!</h1><p>Thanks for joining us.</p>',
+  text: 'Welcome! Thanks for joining us.'
+})
+```
+</CodeGroup>
+
+<RequestExample>
+```json Request Body
+{
+  "from": "hello@yourdomain.com",
+  "to": ["recipient@example.com"],
+  "subject": "Welcome to our service",
+  "html": "<h1>Welcome!</h1><p>Thanks for joining us.</p>",
+  "text": "Welcome! Thanks for joining us.",
+  "cc": ["team@yourdomain.com"],
+  "bcc": ["archive@yourdomain.com"],
+  "reply_to": ["support@yourdomain.com"],
+  "headers": {
+    "X-Custom-Header": "value"
+  },
+  "attachments": [
+    {
+      "filename": "report.pdf",
+      "content": "base64-encoded-content",
+      "content_type": "application/pdf"
+    }
+  ],
+  "tags": [
+    {
+      "name": "campaign",
+      "value": "welcome-series"
+    }
+  ],
+  "scheduled_at": "2024-12-25T10:00:00Z",
+  "timezone": "America/New_York"
+}
+```
+</RequestExample>
+
+### POST `/api/e2/emails`
+
+Send an email immediately or schedule it for later delivery.
+
+#### Request Parameters
+
+<ParamField path="from" type="string" required>
+  Sender email address. Must be from a verified domain.
+  
+  Example: `"hello@yourdomain.com"` or `"John Doe <hello@yourdomain.com>"`
+</ParamField>
+
+<ParamField path="to" type="string | string[]" required>
+  Recipient email address(es). Can be a single string or array.
+  
+  Example: `"user@example.com"` or `["user1@example.com", "user2@example.com"]`
+</ParamField>
+
+<ParamField path="subject" type="string" required>
+  Email subject line.
+</ParamField>
+
+<ParamField path="html" type="string">
+  HTML content of the email. Either `html` or `text` must be provided.
+</ParamField>
+
+<ParamField path="text" type="string">
+  Plain text content of the email. Either `html` or `text` must be provided.
+</ParamField>
+
+<ParamField path="cc" type="string | string[]">
+  CC recipients. Can be a single string or array.
+</ParamField>
+
+<ParamField path="bcc" type="string | string[]">
+  BCC recipients. Can be a single string or array.
+</ParamField>
+
+<ParamField path="reply_to" type="string | string[]">
+  Reply-To addresses. Can be a single string or array.
+</ParamField>
+
+<ParamField path="headers" type="object">
+  Custom email headers as key-value pairs.
+  
+  Example: `{ "X-Custom-Header": "value" }`
+</ParamField>
+
+<ParamField path="attachments" type="array">
+  Array of attachment objects.
+  
+  <Expandable title="Attachment Object">
+    <ParamField path="filename" type="string" required>
+      Original filename of the attachment.
+    </ParamField>
+    
+    <ParamField path="content" type="string" required>
+      Base64-encoded content of the attachment.
+    </ParamField>
+    
+    <ParamField path="content_type" type="string">
+      MIME type of the attachment (e.g., `application/pdf`).
+    </ParamField>
+    
+    <ParamField path="path" type="string">
+      Optional file path for reference.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="tags" type="array">
+  Array of tag objects for categorizing and tracking emails.
+  
+  <Expandable title="Tag Object">
+    <ParamField path="name" type="string" required>
+      Tag name/key.
+    </ParamField>
+    
+    <ParamField path="value" type="string" required>
+      Tag value.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="scheduled_at" type="string">
+  ISO 8601 date string or natural language for scheduling (e.g., `"tomorrow at 9am"`, `"2024-12-25T10:00:00Z"`).
+  
+  When provided, the email will be scheduled instead of sent immediately.
+</ParamField>
+
+<ParamField path="timezone" type="string">
+  Timezone for natural language parsing (e.g., `"America/New_York"`, `"UTC"`).
+  
+  Default: `"UTC"`
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the email.
+</ResponseField>
+
+<ResponseField name="message_id" type="string">
+  RFC 2822 Message-ID assigned by the mail server (only for sent emails).
+</ResponseField>
+
+<ResponseField name="scheduled_at" type="string">
+  ISO 8601 timestamp when the email is scheduled to be sent (only for scheduled emails).
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Email status: `"sent"` or `"scheduled"`.
+</ResponseField>
+
+<ResponseField name="timezone" type="string">
+  Timezone used for scheduling (only for scheduled emails).
+</ResponseField>
+
+<ResponseExample>
+```json Sent Email Response
+{
+  "id": "eml_abc123",
+  "message_id": "<abc123@yourdomain.com>"
+}
+```
+
+```json Scheduled Email Response
+{
+  "id": "eml_abc123",
+  "scheduled_at": "2024-12-25T10:00:00Z",
+  "status": "scheduled",
+  "timezone": "America/New_York"
+}
+```
+</ResponseExample>
+
+---
+
+## List Emails
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/emails?type=all&limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const emails = await inbound.emails.list({
+  type: 'all',
+  limit: 50
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/emails`
+
+List all email activity (sent, received, and scheduled) with comprehensive filtering options.
+
+#### Query Parameters
+
+<ParamField query="type" type="string" default="all">
+  Filter by email type: `all`, `sent`, `received`, or `scheduled`.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by status: `all`, `delivered`, `pending`, `failed`, `bounced`, `scheduled`, `cancelled`, `unread`, `read`, or `archived`.
+  
+  Note: `unread`, `read`, and `archived` only apply to received emails.
+</ParamField>
+
+<ParamField query="time_range" type="string" default="30d">
+  Filter by time range: `1h`, `24h`, `7d`, `30d`, `90d`, or `all`.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search query to filter emails by subject, sender, or recipient. Case-insensitive partial match.
+</ParamField>
+
+<ParamField query="domain" type="string">
+  Filter by domain. Accepts domain ID (e.g., `dom_xxx`) or domain name (e.g., `example.com`).
+</ParamField>
+
+<ParamField query="address" type="string">
+  Filter by email address. Accepts address ID (e.g., `addr_xxx`) or raw email address.
+</ParamField>
+
+<ParamField query="limit" type="integer" default="50">
+  Maximum number of emails to return (1-100).
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of emails to skip for pagination.
+</ParamField>
+
+#### Response
+
+<ResponseField name="data" type="array">
+  Array of email objects matching the query.
+  
+  <Expandable title="Email Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the email.
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Email type: `sent`, `received`, or `scheduled`.
+    </ResponseField>
+    
+    <ResponseField name="message_id" type="string">
+      RFC 2822 Message-ID header value.
+    </ResponseField>
+    
+    <ResponseField name="from" type="string">
+      Sender email address.
+    </ResponseField>
+    
+    <ResponseField name="from_name" type="string">
+      Sender display name if available.
+    </ResponseField>
+    
+    <ResponseField name="to" type="string[]">
+      Array of recipient email addresses.
+    </ResponseField>
+    
+    <ResponseField name="cc" type="string[]">
+      Array of CC recipient email addresses.
+    </ResponseField>
+    
+    <ResponseField name="subject" type="string">
+      Email subject line.
+    </ResponseField>
+    
+    <ResponseField name="preview" type="string">
+      First 200 characters of the email body.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status: `delivered`, `pending`, `failed`, `bounced`, `scheduled`, or `cancelled`.
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp when the email was created/received.
+    </ResponseField>
+    
+    <ResponseField name="sent_at" type="string">
+      ISO 8601 timestamp when the email was sent.
+    </ResponseField>
+    
+    <ResponseField name="scheduled_at" type="string">
+      ISO 8601 timestamp when the email is scheduled to be sent.
+    </ResponseField>
+    
+    <ResponseField name="has_attachments" type="boolean">
+      Whether the email has any attachments.
+    </ResponseField>
+    
+    <ResponseField name="attachment_count" type="number">
+      Number of attachments on the email.
+    </ResponseField>
+    
+    <ResponseField name="is_read" type="boolean">
+      Whether the email has been read (only for received emails).
+    </ResponseField>
+    
+    <ResponseField name="read_at" type="string">
+      ISO 8601 timestamp when the email was marked as read.
+    </ResponseField>
+    
+    <ResponseField name="is_archived" type="boolean">
+      Whether the email has been archived (only for received emails).
+    </ResponseField>
+    
+    <ResponseField name="thread_id" type="string">
+      ID of the thread this email belongs to, if threaded.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+  
+  <Expandable title="Pagination Object">
+    <ResponseField name="limit" type="number">
+      Number of results per page.
+    </ResponseField>
+    
+    <ResponseField name="offset" type="number">
+      Number of results skipped.
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching emails.
+    </ResponseField>
+    
+    <ResponseField name="has_more" type="boolean">
+      Whether there are more results available.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="filters" type="object">
+  Applied filters for this query.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "eml_abc123",
+      "type": "sent",
+      "message_id": "<abc123@yourdomain.com>",
+      "from": "hello@yourdomain.com",
+      "from_name": null,
+      "to": ["recipient@example.com"],
+      "cc": [],
+      "subject": "Welcome to our service",
+      "preview": "Welcome! Thanks for joining us.",
+      "status": "delivered",
+      "created_at": "2024-01-15T10:30:00Z",
+      "sent_at": "2024-01-15T10:30:01Z",
+      "scheduled_at": null,
+      "has_attachments": false,
+      "attachment_count": 0,
+      "thread_id": "thread_xyz789"
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1,
+    "has_more": false
+  },
+  "filters": {
+    "type": "all",
+    "time_range": "30d"
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Email
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.inbound.new/api/e2/emails/eml_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const email = await inbound.emails.get('eml_abc123')
+```
+</CodeGroup>
+
+### GET `/api/e2/emails/:id`
+
+Retrieve a single email by ID. Works for sent, received, and scheduled emails.
+
+#### Response
+
+<ResponseField name="object" type="string">
+  Object type: `"email"`.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  Unique identifier for the email.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Email type: `sent`, `received`, or `scheduled`.
+</ResponseField>
+
+<ResponseField name="from" type="string">
+  Sender email address.
+</ResponseField>
+
+<ResponseField name="to" type="string[]">
+  Array of recipient email addresses.
+</ResponseField>
+
+<ResponseField name="cc" type="string[]">
+  Array of CC recipient email addresses.
+</ResponseField>
+
+<ResponseField name="bcc" type="string[]">
+  Array of BCC recipient email addresses.
+</ResponseField>
+
+<ResponseField name="reply_to" type="string[]">
+  Array of Reply-To addresses.
+</ResponseField>
+
+<ResponseField name="subject" type="string">
+  Email subject line.
+</ResponseField>
+
+<ResponseField name="html" type="string">
+  HTML content of the email.
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  Plain text content of the email.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `delivered`, `pending`, `failed`, `bounced`, `scheduled`, or `cancelled`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the email was created/received.
+</ResponseField>
+
+<ResponseField name="sent_at" type="string">
+  ISO 8601 timestamp when the email was sent.
+</ResponseField>
+
+<ResponseField name="scheduled_at" type="string">
+  ISO 8601 timestamp when the email is scheduled to be sent.
+</ResponseField>
+
+<ResponseField name="has_attachments" type="boolean">
+  Whether the email has any attachments.
+</ResponseField>
+
+<ResponseField name="attachments" type="array">
+  Array of attachment metadata objects.
+</ResponseField>
+
+<ResponseField name="is_read" type="boolean">
+  Whether the email has been read (only for received emails).
+</ResponseField>
+
+<ResponseField name="thread_id" type="string">
+  ID of the thread this email belongs to.
+</ResponseField>
+
+<ResponseField name="thread_position" type="number">
+  Position in the thread (0 = first message).
+</ResponseField>
+
+<ResponseField name="headers" type="object">
+  Email headers as key-value pairs.
+</ResponseField>
+
+<ResponseField name="tags" type="array">
+  Array of tag objects (only for sent emails).
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "object": "email",
+  "id": "eml_abc123",
+  "type": "sent",
+  "from": "hello@yourdomain.com",
+  "to": ["recipient@example.com"],
+  "cc": [],
+  "bcc": [],
+  "reply_to": null,
+  "subject": "Welcome to our service",
+  "html": "<h1>Welcome!</h1>",
+  "text": "Welcome!",
+  "status": "delivered",
+  "created_at": "2024-01-15T10:30:00Z",
+  "sent_at": "2024-01-15T10:30:01Z",
+  "scheduled_at": null,
+  "has_attachments": false,
+  "attachments": [],
+  "thread_id": "thread_xyz789",
+  "thread_position": 0,
+  "headers": {},
+  "tags": []
+}
+```
+</ResponseExample>
+
+---
+
+## Reply to Email
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/emails/eml_abc123/reply \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from": "hello@yourdomain.com",
+    "text": "Thanks for reaching out!",
+    "html": "<p>Thanks for reaching out!</p>"
+  }'
+```
+
+```typescript TypeScript SDK
+const reply = await inbound.emails.reply('eml_abc123', {
+  from: 'hello@yourdomain.com',
+  text: 'Thanks for reaching out!',
+  html: '<p>Thanks for reaching out!</p>'
+})
+```
+</CodeGroup>
+
+### POST `/api/e2/emails/:id/reply`
+
+Reply to an email or thread. Accepts either an email ID or thread ID (replies to latest message in thread).
+
+#### Request Parameters
+
+<ParamField path="from" type="string" required>
+  Sender email address. Must be from a verified domain.
+</ParamField>
+
+<ParamField path="to" type="string | string[]">
+  Recipient email address(es). Defaults to original sender if not provided.
+</ParamField>
+
+<ParamField path="subject" type="string">
+  Email subject. Defaults to `Re: [original subject]` if not provided.
+</ParamField>
+
+<ParamField path="html" type="string">
+  HTML content of the reply. Either `html` or `text` must be provided.
+</ParamField>
+
+<ParamField path="text" type="string">
+  Plain text content of the reply. Either `html` or `text` must be provided.
+</ParamField>
+
+<ParamField path="headers" type="object">
+  Custom email headers as key-value pairs.
+</ParamField>
+
+<ParamField path="attachments" type="array">
+  Array of attachment objects.
+</ParamField>
+
+<ParamField path="reply_all" type="boolean">
+  Include original CC recipients. Default: `false`.
+</ParamField>
+
+<ParamField path="tags" type="array">
+  Array of tag objects for categorizing the reply.
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the reply email.
+</ResponseField>
+
+<ResponseField name="message_id" type="string">
+  RFC 2822 Message-ID of the reply.
+</ResponseField>
+
+<ResponseField name="aws_message_id" type="string">
+  AWS SES message ID.
+</ResponseField>
+
+<ResponseField name="replied_to_email_id" type="string">
+  ID of the email being replied to.
+</ResponseField>
+
+<ResponseField name="replied_to_thread_id" type="string">
+  ID of the thread this reply belongs to.
+</ResponseField>
+
+<ResponseField name="is_thread_reply" type="boolean">
+  Whether the ID provided was a thread ID.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "id": "eml_reply123",
+  "message_id": "<reply123@yourdomain.com>",
+  "aws_message_id": "01000abc123def456",
+  "replied_to_email_id": "eml_abc123",
+  "replied_to_thread_id": "thread_xyz789",
+  "is_thread_reply": false
+}
+```
+</ResponseExample>
+
+---
+
+## Retry Email Delivery
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/emails/eml_abc123/retry \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "endpoint_id": "ep_xyz789"
+  }'
+```
+
+```typescript TypeScript SDK
+const result = await inbound.emails.retry('eml_abc123', {
+  endpoint_id: 'ep_xyz789'
+})
+```
+</CodeGroup>
+
+### POST `/api/e2/emails/:id/retry`
+
+Retry delivery of a received email. Can retry to a specific endpoint, retry a specific failed delivery, or retry to all configured endpoints.
+
+#### Request Parameters
+
+<ParamField path="endpoint_id" type="string">
+  Endpoint ID to retry delivery to. If not provided, retries to all configured endpoints.
+</ParamField>
+
+<ParamField path="delivery_id" type="string">
+  Specific delivery ID to retry. If provided, retries that specific delivery.
+</ParamField>
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the retry was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message about the retry result.
+</ResponseField>
+
+<ResponseField name="delivery_id" type="string">
+  ID of the delivery that was retried.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Email re-delivery initiated successfully",
+  "delivery_id": "dlv_abc123"
+}
+```
+</ResponseExample>
+
+---
+
+## Update Email
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.inbound.new/api/e2/emails/eml_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "is_read": true,
+    "is_archived": false
+  }'
+```
+
+```typescript TypeScript SDK
+const email = await inbound.emails.update('eml_abc123', {
+  is_read: true,
+  is_archived: false
+})
+```
+</CodeGroup>
+
+### PATCH `/api/e2/emails/:id`
+
+Update metadata for a received email. Supports marking emails as read/unread and archived/unarchived.
+
+#### Request Parameters
+
+<ParamField path="is_read" type="boolean">
+  Mark email as read or unread.
+</ParamField>
+
+<ParamField path="is_archived" type="boolean">
+  Mark email as archived or unarchived.
+</ParamField>
+
+#### Response
+
+<ResponseField name="object" type="string">
+  Object type: `"email"`.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  Unique identifier for the email.
+</ResponseField>
+
+<ResponseField name="is_read" type="boolean">
+  Whether the email is marked as read.
+</ResponseField>
+
+<ResponseField name="is_archived" type="boolean">
+  Whether the email is archived.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of when the email was last updated.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "object": "email",
+  "id": "eml_abc123",
+  "is_read": true,
+  "is_archived": false,
+  "updated_at": "2024-01-15T10:35:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Cancel Scheduled Email
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.inbound.new/api/e2/emails/eml_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const result = await inbound.emails.delete('eml_abc123')
+```
+</CodeGroup>
+
+### DELETE `/api/e2/emails/:id`
+
+Cancel a scheduled email by ID. Only works for emails that haven't been sent yet.
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the cancellation was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message about the cancellation result.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  ID of the cancelled email.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Scheduled email cancelled successfully",
+  "id": "eml_abc123"
+}
+```
+</ResponseExample>

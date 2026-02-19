@@ -1,0 +1,653 @@
+---
+title: 'Mail Threads'
+description: 'Manage email threads and conversations'
+---
+
+## List Threads
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/mail/threads?limit=25&unread=true" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+import { Inbound } from '@inbound/sdk'
+
+const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
+
+const threads = await inbound.mail.threads.list({
+  limit: 25,
+  unread: true
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/mail/threads`
+
+List email threads (conversations) for your inbox with cursor-based pagination. This is the primary endpoint for building an inbox UI.
+
+**What is a Thread?**
+
+A thread groups related emails together based on the In-Reply-To and References headers, similar to how Gmail groups conversations. Each thread contains both inbound (received) and outbound (sent) messages.
+
+**Use with `/mail/threads/:id`:**
+
+Use this endpoint to list threads, then use `GET /mail/threads/:id` to fetch all messages in a specific thread.
+
+#### Query Parameters
+
+<ParamField query="limit" type="integer" default="25">
+  Maximum number of threads to return (1-100).
+</ParamField>
+
+<ParamField query="cursor" type="string">
+  Cursor for pagination. Pass the thread ID from `pagination.next_cursor` of the previous response to get the next page.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search query to filter threads by subject or participant emails. Case-insensitive partial match.
+</ParamField>
+
+<ParamField query="unread" type="string" default="false">
+  Filter by unread status. Set to `true` to only return threads with unread messages.
+</ParamField>
+
+<ParamField query="domain" type="string">
+  Filter threads by domain. Accepts domain ID (e.g., `dom_xxx`) or domain name (e.g., `example.com`).
+  
+  Returns threads where any participant email matches the domain.
+</ParamField>
+
+<ParamField query="address" type="string">
+  Filter threads by email address. Accepts address ID (e.g., `addr_xxx`) or raw email address.
+  
+  Returns threads where the address is a participant.
+</ParamField>
+
+#### Response
+
+<ResponseField name="threads" type="array">
+  Array of thread objects matching the query, sorted by last message date (newest first).
+  
+  <Expandable title="Thread Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the thread.
+    </ResponseField>
+    
+    <ResponseField name="root_message_id" type="string">
+      RFC 2822 Message-ID of the first message in the thread.
+    </ResponseField>
+    
+    <ResponseField name="normalized_subject" type="string">
+      Normalized subject line (stripped of Re:, Fwd:, etc.) used for thread grouping.
+    </ResponseField>
+    
+    <ResponseField name="participant_emails" type="string[]">
+      Array of all unique email addresses that have participated in this thread.
+    </ResponseField>
+    
+    <ResponseField name="participant_names" type="string[]">
+      Array of formatted participant names in the format `First Last <email@domain.com>` or just `email@domain.com` if no name is available.
+    </ResponseField>
+    
+    <ResponseField name="message_count" type="number">
+      Total number of messages in the thread (both inbound and outbound).
+    </ResponseField>
+    
+    <ResponseField name="last_message_at" type="string">
+      ISO 8601 timestamp of the most recent message in the thread.
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp when the thread was created (first message received).
+    </ResponseField>
+    
+    <ResponseField name="latest_message" type="object">
+      Preview of the most recent message in the thread.
+      
+      <Expandable title="Latest Message Object">
+        <ResponseField name="id" type="string">
+          Unique identifier of the message.
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Message type: `inbound` or `outbound`.
+        </ResponseField>
+        
+        <ResponseField name="subject" type="string">
+          Subject line of the message.
+        </ResponseField>
+        
+        <ResponseField name="from_text" type="string">
+          Formatted sender information (name and/or email).
+        </ResponseField>
+        
+        <ResponseField name="text_preview" type="string">
+          First 200 characters of the message body.
+        </ResponseField>
+        
+        <ResponseField name="is_read" type="boolean">
+          Whether the message has been read (always true for outbound).
+        </ResponseField>
+        
+        <ResponseField name="has_attachments" type="boolean">
+          Whether the message has any attachments.
+        </ResponseField>
+        
+        <ResponseField name="date" type="string">
+          ISO 8601 timestamp of when the message was sent/received.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="has_unread" type="boolean">
+      Whether the thread has any unread inbound messages.
+    </ResponseField>
+    
+    <ResponseField name="is_archived" type="boolean">
+      Whether the thread has been archived.
+    </ResponseField>
+    
+    <ResponseField name="unread_count" type="number">
+      Number of unread messages in the thread.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata for cursor-based pagination.
+  
+  <Expandable title="Pagination Object">
+    <ResponseField name="limit" type="number">
+      Number of results per page.
+    </ResponseField>
+    
+    <ResponseField name="has_more" type="boolean">
+      Whether there are more threads available after this page.
+    </ResponseField>
+    
+    <ResponseField name="next_cursor" type="string">
+      Cursor to pass as the `cursor` parameter to fetch the next page. Null if no more results.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="filters" type="object">
+  Applied filters for this query.
+  
+  <Expandable title="Filters Object">
+    <ResponseField name="search" type="string">
+      Applied search query.
+    </ResponseField>
+    
+    <ResponseField name="unread_only" type="boolean">
+      Whether filtering for unread threads only.
+    </ResponseField>
+    
+    <ResponseField name="domain" type="string">
+      Applied domain filter (resolved domain name).
+    </ResponseField>
+    
+    <ResponseField name="address" type="string">
+      Applied address filter (resolved email address).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "threads": [
+    {
+      "id": "thread_abc123",
+      "root_message_id": "<original@example.com>",
+      "normalized_subject": "project update",
+      "participant_emails": [
+        "alice@example.com",
+        "support@yourdomain.com",
+        "bob@example.com"
+      ],
+      "participant_names": [
+        "Alice Johnson <alice@example.com>",
+        "support@yourdomain.com",
+        "Bob Smith <bob@example.com>"
+      ],
+      "message_count": 5,
+      "last_message_at": "2024-01-15T14:30:00Z",
+      "created_at": "2024-01-15T10:00:00Z",
+      "latest_message": {
+        "id": "eml_xyz789",
+        "type": "inbound",
+        "subject": "Re: Project update",
+        "from_text": "Alice Johnson <alice@example.com>",
+        "text_preview": "Thanks for the update! I have a few questions about the timeline...",
+        "is_read": false,
+        "has_attachments": true,
+        "date": "2024-01-15T14:30:00Z"
+      },
+      "has_unread": true,
+      "is_archived": false,
+      "unread_count": 2
+    }
+  ],
+  "pagination": {
+    "limit": 25,
+    "has_more": true,
+    "next_cursor": "thread_abc123"
+  },
+  "filters": {
+    "unread_only": true
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Thread
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.inbound.new/api/e2/mail/threads/thread_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const thread = await inbound.mail.threads.get('thread_abc123')
+```
+</CodeGroup>
+
+### GET `/api/e2/mail/threads/:id`
+
+Retrieve a complete email thread (conversation) with all messages.
+
+**What You Get:**
+- Thread metadata (subject, participants, timestamps)
+- All messages in the thread (both inbound and outbound)
+- Messages sorted chronologically by thread position
+
+**Message Types:**
+- `inbound` - Emails you received
+- `outbound` - Emails you sent (includes delivery status)
+
+#### Response
+
+<ResponseField name="thread" type="object">
+  Thread metadata.
+  
+  <Expandable title="Thread Details">
+    <ResponseField name="id" type="string">
+      Unique identifier for the thread.
+    </ResponseField>
+    
+    <ResponseField name="root_message_id" type="string">
+      RFC 2822 Message-ID of the first message in the thread.
+    </ResponseField>
+    
+    <ResponseField name="normalized_subject" type="string">
+      Normalized subject line (stripped of Re:, Fwd:, etc.).
+    </ResponseField>
+    
+    <ResponseField name="participant_emails" type="string[]">
+      Array of all unique email addresses that have participated in this thread.
+    </ResponseField>
+    
+    <ResponseField name="participant_names" type="string[]">
+      Array of formatted participant names.
+    </ResponseField>
+    
+    <ResponseField name="message_count" type="number">
+      Total number of messages in the thread.
+    </ResponseField>
+    
+    <ResponseField name="last_message_at" type="string">
+      ISO 8601 timestamp of the most recent message.
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="string">
+      ISO 8601 timestamp when the thread was created.
+    </ResponseField>
+    
+    <ResponseField name="updated_at" type="string">
+      ISO 8601 timestamp when the thread was last updated.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Array of all messages in the thread, sorted by thread position (chronological).
+  
+  <Expandable title="Message Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the message.
+    </ResponseField>
+    
+    <ResponseField name="message_id" type="string">
+      RFC 2822 Message-ID header value.
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Message type: `inbound` or `outbound`.
+    </ResponseField>
+    
+    <ResponseField name="thread_position" type="number">
+      Position of the message in the thread (0 = first message).
+    </ResponseField>
+    
+    <ResponseField name="subject" type="string">
+      Subject line of the message.
+    </ResponseField>
+    
+    <ResponseField name="text_body" type="string">
+      Plain text body of the message.
+    </ResponseField>
+    
+    <ResponseField name="html_body" type="string">
+      HTML body of the message.
+    </ResponseField>
+    
+    <ResponseField name="from" type="string">
+      Formatted sender (display name and email).
+    </ResponseField>
+    
+    <ResponseField name="from_name" type="string">
+      Sender display name if available.
+    </ResponseField>
+    
+    <ResponseField name="from_address" type="string">
+      Sender email address.
+    </ResponseField>
+    
+    <ResponseField name="to" type="string[]">
+      Array of recipient email addresses.
+    </ResponseField>
+    
+    <ResponseField name="cc" type="string[]">
+      Array of CC recipient email addresses.
+    </ResponseField>
+    
+    <ResponseField name="bcc" type="string[]">
+      Array of BCC recipient email addresses.
+    </ResponseField>
+    
+    <ResponseField name="date" type="string">
+      ISO 8601 timestamp from the Date header.
+    </ResponseField>
+    
+    <ResponseField name="received_at" type="string">
+      ISO 8601 timestamp when the message was received (inbound only).
+    </ResponseField>
+    
+    <ResponseField name="sent_at" type="string">
+      ISO 8601 timestamp when the message was sent (outbound only).
+    </ResponseField>
+    
+    <ResponseField name="is_read" type="boolean">
+      Whether the message has been read (always true for outbound).
+    </ResponseField>
+    
+    <ResponseField name="read_at" type="string">
+      ISO 8601 timestamp when the message was marked as read.
+    </ResponseField>
+    
+    <ResponseField name="has_attachments" type="boolean">
+      Whether the message has any attachments.
+    </ResponseField>
+    
+    <ResponseField name="attachments" type="array">
+      Array of attachment metadata objects.
+      
+      <Expandable title="Attachment Object">
+        <ResponseField name="filename" type="string">
+          Original filename of the attachment.
+        </ResponseField>
+        
+        <ResponseField name="contentType" type="string">
+          MIME type of the attachment.
+        </ResponseField>
+        
+        <ResponseField name="size" type="number">
+          Size of the attachment in bytes.
+        </ResponseField>
+        
+        <ResponseField name="contentId" type="string">
+          Content-ID for inline attachments.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="in_reply_to" type="string">
+      RFC 2822 In-Reply-To header value.
+    </ResponseField>
+    
+    <ResponseField name="references" type="string[]">
+      Array of Message-IDs from the References header.
+    </ResponseField>
+    
+    <ResponseField name="headers" type="object">
+      Raw email headers as key-value pairs.
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Array of tags attached to the message (outbound only).
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Delivery status for outbound messages: `pending`, `sent`, `failed`, or `bounced`.
+    </ResponseField>
+    
+    <ResponseField name="failure_reason" type="string">
+      Error message if the outbound message failed to send.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total_count" type="number">
+  Total number of messages returned.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "thread": {
+    "id": "thread_abc123",
+    "root_message_id": "<original@example.com>",
+    "normalized_subject": "project update",
+    "participant_emails": [
+      "alice@example.com",
+      "support@yourdomain.com"
+    ],
+    "participant_names": [
+      "Alice Johnson <alice@example.com>",
+      "support@yourdomain.com"
+    ],
+    "message_count": 3,
+    "last_message_at": "2024-01-15T14:30:00Z",
+    "created_at": "2024-01-15T10:00:00Z",
+    "updated_at": "2024-01-15T14:30:00Z"
+  },
+  "messages": [
+    {
+      "id": "eml_first123",
+      "message_id": "<original@example.com>",
+      "type": "inbound",
+      "thread_position": 0,
+      "subject": "Project update",
+      "text_body": "Here's the latest update on the project...",
+      "html_body": "<p>Here's the latest update on the project...</p>",
+      "from": "Alice Johnson <alice@example.com>",
+      "from_name": "Alice Johnson",
+      "from_address": "alice@example.com",
+      "to": ["support@yourdomain.com"],
+      "cc": [],
+      "bcc": [],
+      "date": "2024-01-15T10:00:00Z",
+      "received_at": "2024-01-15T10:00:01Z",
+      "sent_at": null,
+      "is_read": true,
+      "read_at": "2024-01-15T10:05:00Z",
+      "has_attachments": false,
+      "attachments": [],
+      "in_reply_to": null,
+      "references": [],
+      "headers": {},
+      "tags": []
+    },
+    {
+      "id": "eml_reply456",
+      "message_id": "<reply@yourdomain.com>",
+      "type": "outbound",
+      "thread_position": 1,
+      "subject": "Re: Project update",
+      "text_body": "Thanks for the update! Here are my thoughts...",
+      "html_body": "<p>Thanks for the update! Here are my thoughts...</p>",
+      "from": "support@yourdomain.com",
+      "from_name": null,
+      "from_address": "support@yourdomain.com",
+      "to": ["alice@example.com"],
+      "cc": [],
+      "bcc": [],
+      "date": "2024-01-15T12:00:00Z",
+      "received_at": null,
+      "sent_at": "2024-01-15T12:00:00Z",
+      "is_read": true,
+      "read_at": "2024-01-15T12:00:00Z",
+      "has_attachments": false,
+      "attachments": [],
+      "in_reply_to": "<original@example.com>",
+      "references": ["<original@example.com>"],
+      "headers": {
+        "In-Reply-To": "<original@example.com>",
+        "References": "<original@example.com>"
+      },
+      "tags": [],
+      "status": "sent",
+      "failure_reason": null
+    },
+    {
+      "id": "eml_reply789",
+      "message_id": "<reply2@example.com>",
+      "type": "inbound",
+      "thread_position": 2,
+      "subject": "Re: Project update",
+      "text_body": "Great points! I have a few questions...",
+      "html_body": "<p>Great points! I have a few questions...</p>",
+      "from": "Alice Johnson <alice@example.com>",
+      "from_name": "Alice Johnson",
+      "from_address": "alice@example.com",
+      "to": ["support@yourdomain.com"],
+      "cc": [],
+      "bcc": [],
+      "date": "2024-01-15T14:30:00Z",
+      "received_at": "2024-01-15T14:30:01Z",
+      "sent_at": null,
+      "is_read": false,
+      "read_at": null,
+      "has_attachments": true,
+      "attachments": [
+        {
+          "filename": "questions.pdf",
+          "contentType": "application/pdf",
+          "size": 125678,
+          "contentId": null
+        }
+      ],
+      "in_reply_to": "<reply@yourdomain.com>",
+      "references": [
+        "<original@example.com>",
+        "<reply@yourdomain.com>"
+      ],
+      "headers": {},
+      "tags": []
+    }
+  ],
+  "total_count": 3
+}
+```
+</ResponseExample>
+
+---
+
+## Threading Logic
+
+Email threads are created automatically based on standard email headers:
+
+### Thread Grouping Rules
+
+1. **In-Reply-To Header**: Links a message to its parent
+2. **References Header**: Contains the full chain of Message-IDs
+3. **Normalized Subject**: Fallback grouping by subject (with Re:, Fwd: stripped)
+
+### Example Thread Structure
+
+```
+Thread: "Project Update"
+├─ Message 1 (Inbound) - "Project update"
+│  Message-ID: <original@example.com>
+│
+├─ Message 2 (Outbound) - "Re: Project update"
+│  In-Reply-To: <original@example.com>
+│  References: <original@example.com>
+│
+└─ Message 3 (Inbound) - "Re: Project update"
+   In-Reply-To: <reply@yourdomain.com>
+   References: <original@example.com> <reply@yourdomain.com>
+```
+
+---
+
+## Building an Inbox UI
+
+### Step 1: List Threads
+
+Use `/mail/threads` to display a thread list (like Gmail's inbox):
+
+```typescript
+const { threads, pagination } = await inbound.mail.threads.list({
+  limit: 25,
+  unread: true
+})
+
+// Display threads
+for (const thread of threads) {
+  console.log(`[${thread.has_unread ? '●' : ' '}] ${thread.normalized_subject}`)
+  console.log(`   ${thread.participant_names.join(', ')}`)
+  console.log(`   ${thread.latest_message.text_preview}`)
+  console.log(`   ${thread.message_count} messages, ${thread.unread_count} unread`)
+  console.log()
+}
+```
+
+### Step 2: Display Thread
+
+When user clicks a thread, use `/mail/threads/:id` to show all messages:
+
+```typescript
+const { thread, messages } = await inbound.mail.threads.get('thread_abc123')
+
+// Display conversation
+console.log(`Thread: ${thread.normalized_subject}`)
+console.log(`Participants: ${thread.participant_names.join(', ')}`)
+console.log()
+
+for (const message of messages) {
+  console.log(`[${message.type === 'inbound' ? '→' : '←'}] ${message.from}`)
+  console.log(`   ${message.subject}`)
+  console.log(`   ${message.text_body}`)
+  console.log()
+}
+```
+
+### Step 3: Reply to Thread
+
+Use `/emails/:id/reply` to reply within the thread:
+
+```typescript
+// Reply to the thread (uses thread ID)
+const reply = await inbound.emails.reply('thread_abc123', {
+  from: 'support@yourdomain.com',
+  text: 'Thanks for your questions!',
+  html: '<p>Thanks for your questions!</p>'
+})
+```

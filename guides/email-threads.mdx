@@ -1,0 +1,476 @@
+---
+title: 'Email Threads'
+description: 'View and manage email conversations with automatic thread grouping'
+---
+
+## Overview
+
+Inbound automatically groups related emails into threads (conversations), similar to Gmail. This makes it easy to build inbox interfaces that show conversations instead of individual messages.
+
+## How Threading Works
+
+Inbound groups emails into threads based on:
+
+1. **Message-ID Headers** - `In-Reply-To` and `References` headers link replies
+2. **Subject Line** - Normalized subject (strips `Re:`, `Fwd:`, etc.)
+3. **Participants** - Emails between the same people
+
+## List All Threads
+
+### Basic Usage
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+const { threads } = await inbound.threads.list({
+  limit: 25
+})
+
+console.log(`Found ${threads.length} threads`)
+
+threads.forEach(thread => {
+  console.log(`\n${thread.normalized_subject}`)
+  console.log(`  Messages: ${thread.message_count}`)
+  console.log(`  Participants: ${thread.participant_emails.join(', ')}`)
+  console.log(`  Last message: ${thread.last_message_at}`)
+  console.log(`  Unread: ${thread.has_unread}`)
+})
+```
+
+### API Response
+
+```json
+{
+  "threads": [
+    {
+      "id": "thread_abc123",
+      "root_message_id": "<CABcd123@mail.gmail.com>",
+      "normalized_subject": "question about pricing",
+      "participant_emails": [
+        "john@example.com",
+        "support@yourdomain.com"
+      ],
+      "participant_names": [
+        "John Doe <john@example.com>",
+        "support@yourdomain.com"
+      ],
+      "message_count": 3,
+      "last_message_at": "2026-02-19T15:30:00.000Z",
+      "created_at": "2026-02-19T10:00:00.000Z",
+      "has_unread": true,
+      "unread_count": 1,
+      "is_archived": false,
+      "latest_message": {
+        "id": "email_xyz789",
+        "type": "inbound",
+        "subject": "Re: Question about pricing",
+        "from_text": "John Doe <john@example.com>",
+        "text_preview": "Thanks for the quick response! One more question...",
+        "is_read": false,
+        "has_attachments": false,
+        "date": "2026-02-19T15:30:00.000Z"
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 25,
+    "has_more": true,
+    "next_cursor": "thread_def456"
+  }
+}
+```
+
+## Filtering Threads
+
+### By Domain
+
+```javascript
+// Filter by domain name
+const { threads } = await inbound.threads.list({
+  domain: 'example.com',
+  limit: 25
+})
+
+// Or by domain ID
+const { threads } = await inbound.threads.list({
+  domain: 'dom_abc123',
+  limit: 25
+})
+```
+
+### By Email Address
+
+```javascript
+// Filter by specific address
+const { threads } = await inbound.threads.list({
+  address: 'support@yourdomain.com',
+  limit: 25
+})
+
+// Or by address ID
+const { threads } = await inbound.threads.list({
+  address: 'addr_abc123',
+  limit: 25
+})
+```
+
+### Unread Only
+
+```javascript
+const { threads } = await inbound.threads.list({
+  unread: true,
+  limit: 25
+})
+
+console.log(`You have ${threads.length} unread conversations`)
+```
+
+### Search
+
+```javascript
+const { threads } = await inbound.threads.list({
+  search: 'invoice',
+  limit: 25
+})
+
+// Searches in:
+// - Subject lines
+// - Participant emails
+```
+
+## Pagination
+
+Use cursor-based pagination for large inboxes:
+
+```javascript
+let cursor = null
+let allThreads = []
+
+do {
+  const response = await inbound.threads.list({
+    limit: 100,
+    cursor
+  })
+  
+  allThreads.push(...response.threads)
+  
+  cursor = response.pagination.next_cursor
+  console.log(`Fetched ${allThreads.length} threads...`)
+  
+} while (response.pagination.has_more)
+
+console.log(`Total threads: ${allThreads.length}`)
+```
+
+## Get Thread Details
+
+Retrieve all messages in a thread:
+
+```javascript
+const thread = await inbound.threads.get('thread_abc123')
+
+console.log('Thread:', thread.thread.normalized_subject)
+console.log(`${thread.total_count} messages:`)
+
+thread.messages.forEach((message, i) => {
+  console.log(`\n${i + 1}. ${message.type} - ${message.subject}`)
+  console.log(`   From: ${message.from}`)
+  console.log(`   Date: ${message.date}`)
+  console.log(`   Preview: ${message.text_body?.substring(0, 100)}...`)
+})
+```
+
+### Response Format
+
+```json
+{
+  "thread": {
+    "id": "thread_abc123",
+    "root_message_id": "<CABcd123@mail.gmail.com>",
+    "normalized_subject": "question about pricing",
+    "participant_emails": ["john@example.com", "support@yourdomain.com"],
+    "participant_names": ["John Doe <john@example.com>", "support@yourdomain.com"],
+    "message_count": 3,
+    "last_message_at": "2026-02-19T15:30:00.000Z",
+    "created_at": "2026-02-19T10:00:00.000Z",
+    "updated_at": "2026-02-19T15:30:00.000Z"
+  },
+  "messages": [
+    {
+      "id": "email_123",
+      "message_id": "<CABcd123@mail.gmail.com>",
+      "type": "inbound",
+      "thread_position": 0,
+      "subject": "Question about pricing",
+      "text_body": "Hi, I have a question about your pricing plans...",
+      "html_body": "<p>Hi, I have a question about your pricing plans...</p>",
+      "from": "John Doe <john@example.com>",
+      "from_name": "John Doe",
+      "from_address": "john@example.com",
+      "to": ["support@yourdomain.com"],
+      "date": "2026-02-19T10:00:00.000Z",
+      "is_read": true,
+      "has_attachments": false,
+      "attachments": []
+    },
+    {
+      "id": "sent_456",
+      "message_id": "<456@yourdomain.com>",
+      "type": "outbound",
+      "thread_position": 1,
+      "subject": "Re: Question about pricing",
+      "text_body": "Thanks for reaching out! Here's our pricing...",
+      "from": "support@yourdomain.com",
+      "to": ["john@example.com"],
+      "sent_at": "2026-02-19T11:00:00.000Z",
+      "is_read": true,
+      "status": "sent"
+    }
+  ],
+  "total_count": 3
+}
+```
+
+## Building an Inbox UI
+
+### Thread List Component
+
+```typescript
+import { Inbound } from 'inboundemail'
+import { useState, useEffect } from 'react'
+
+interface Thread {
+  id: string
+  normalized_subject: string
+  participant_names: string[]
+  message_count: number
+  last_message_at: string
+  has_unread: boolean
+  unread_count: number
+  latest_message?: {
+    text_preview: string
+    from_text: string
+  }
+}
+
+export function InboxList() {
+  const [threads, setThreads] = useState<Thread[]>([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    loadThreads()
+  }, [])
+  
+  async function loadThreads() {
+    const response = await fetch('/api/threads')
+    const data = await response.json()
+    setThreads(data.threads)
+    setLoading(false)
+  }
+  
+  if (loading) return <div>Loading...</div>
+  
+  return (
+    <div className="inbox">
+      {threads.map(thread => (
+        <div 
+          key={thread.id}
+          className={`thread-item ${thread.has_unread ? 'unread' : ''}`}
+          onClick={() => openThread(thread.id)}
+        >
+          <div className="thread-subject">
+            {thread.normalized_subject}
+            {thread.has_unread && (
+              <span className="unread-badge">{thread.unread_count}</span>
+            )}
+          </div>
+          <div className="thread-participants">
+            {thread.participant_names.join(', ')}
+          </div>
+          <div className="thread-preview">
+            {thread.latest_message?.text_preview}
+          </div>
+          <div className="thread-meta">
+            {thread.message_count} messages · {formatDate(thread.last_message_at)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function formatDate(isoDate: string) {
+  const date = new Date(isoDate)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
+  return date.toLocaleDateString()
+}
+```
+
+### Thread View Component
+
+```typescript
+export function ThreadView({ threadId }: { threadId: string }) {
+  const [thread, setThread] = useState(null)
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    loadThread()
+  }, [threadId])
+  
+  async function loadThread() {
+    const response = await fetch(`/api/threads/${threadId}`)
+    const data = await response.json()
+    setThread(data)
+    setLoading(false)
+  }
+  
+  if (loading) return <div>Loading...</div>
+  if (!thread) return <div>Thread not found</div>
+  
+  return (
+    <div className="thread-view">
+      <div className="thread-header">
+        <h1>{thread.thread.normalized_subject}</h1>
+        <div className="participants">
+          {thread.thread.participant_names.join(', ')}
+        </div>
+      </div>
+      
+      <div className="messages">
+        {thread.messages.map((message: any) => (
+          <div key={message.id} className={`message message-${message.type}`}>
+            <div className="message-header">
+              <strong>{message.from}</strong>
+              <span className="date">{formatDate(message.date)}</span>
+            </div>
+            <div className="message-body">
+              {message.html_body ? (
+                <div dangerouslySetInnerHTML={{ __html: message.html_body }} />
+              ) : (
+                <pre>{message.text_body}</pre>
+              )}
+            </div>
+            {message.attachments?.length > 0 && (
+              <div className="attachments">
+                {message.attachments.map((att: any) => (
+                  <a key={att.filename} href={`/api/attachments/${message.id}/${att.filename}`}>
+                    📎 {att.filename}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      <ReplyBox threadId={threadId} />
+    </div>
+  )
+}
+```
+
+## Replying to Threads
+
+You can reply to a thread using either the thread ID or any message ID in the thread:
+
+```javascript
+// Reply using thread ID (replies to latest message)
+await inbound.threads.reply('thread_abc123', {
+  from: 'support@yourdomain.com',
+  text: 'Following up on this conversation...'
+})
+
+// Or reply using a specific message ID
+await inbound.emails.reply('email_xyz789', {
+  from: 'support@yourdomain.com',
+  text: 'Replying to your question...'
+})
+```
+
+<Note>
+  Learn more about replying in the [Replying to Emails Guide](/guides/replying-to-emails).
+</Note>
+
+## Thread Management
+
+### Mark Thread as Read
+
+```javascript
+// Mark all messages in thread as read
+const thread = await inbound.threads.get('thread_abc123')
+
+for (const message of thread.messages) {
+  if (message.type === 'inbound' && !message.is_read) {
+    await inbound.emails.update(message.id, { is_read: true })
+  }
+}
+```
+
+### Archive Thread
+
+```javascript
+// Archive all messages in thread
+const thread = await inbound.threads.get('thread_abc123')
+
+for (const message of thread.messages) {
+  await inbound.emails.update(message.id, { is_archived: true })
+}
+```
+
+## API Endpoints
+
+### List Threads
+
+```http
+GET https://inbound.new/api/e2/mail/threads
+Authorization: Bearer YOUR_API_KEY
+
+Query Parameters:
+  - limit: number (1-100, default: 25)
+  - cursor: string (for pagination)
+  - domain: string (domain name or ID)
+  - address: string (email address or ID)
+  - search: string (search query)
+  - unread: boolean (filter unread only)
+```
+
+### Get Thread
+
+```http
+GET https://inbound.new/api/e2/mail/threads/:id
+Authorization: Bearer YOUR_API_KEY
+```
+
+## Best Practices
+
+1. **Use cursor pagination** for large inboxes
+2. **Cache thread lists** client-side to reduce API calls
+3. **Load threads on demand** when building UI
+4. **Mark messages as read** when user views them
+5. **Show unread counts** prominently in your inbox UI
+6. **Group by date** for better organization
+7. **Implement search** for finding specific conversations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Replying to Emails" icon="reply" href="/guides/replying-to-emails">
+    Reply to threads and messages
+  </Card>
+  <Card title="Receiving Emails" icon="inbox" href="/guides/receiving-emails">
+    Set up webhooks for new emails
+  </Card>
+  <Card title="Attachments" icon="paperclip" href="/guides/attachments">
+    Handle files in conversations
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/mail-threads">
+    View full threads API docs
+  </Card>
+</CardGroup>

@@ -5,3 +5,8 @@
 # Draft content
 drafts/
 *.draft.mdx
+
+# Ignore meta files
+AGENTS.md
+development.mdx
+index.mdx

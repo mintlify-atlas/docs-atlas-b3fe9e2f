@@ -1,0 +1,614 @@
+---
+title: 'Endpoints'
+description: 'Manage webhooks and email forwarding endpoints'
+---
+
+## Create Endpoint
+
+<CodeGroup>
+```bash cURL - Webhook
+curl -X POST https://api.inbound.new/api/e2/endpoints \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Support Webhook",
+    "type": "webhook",
+    "config": {
+      "url": "https://api.example.com/webhooks/email",
+      "timeout": 30,
+      "retryAttempts": 3,
+      "headers": {
+        "X-Custom-Header": "value"
+      }
+    },
+    "description": "Webhook for support emails"
+  }'
+```
+
+```bash cURL - Email Forward
+curl -X POST https://api.inbound.new/api/e2/endpoints \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Forward to Gmail",
+    "type": "email",
+    "config": {
+      "forwardTo": "team@gmail.com",
+      "preserveHeaders": true
+    }
+  }'
+```
+
+```bash cURL - Email Group
+curl -X POST https://api.inbound.new/api/e2/endpoints \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Team Distribution List",
+    "type": "email_group",
+    "config": {
+      "emails": [
+        "alice@team.com",
+        "bob@team.com",
+        "carol@team.com"
+      ],
+      "preserveHeaders": true
+    }
+  }'
+```
+
+```typescript TypeScript SDK
+import { Inbound } from '@inbound/sdk'
+
+const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
+
+// Webhook endpoint
+const webhook = await inbound.endpoints.create({
+  name: 'Support Webhook',
+  type: 'webhook',
+  config: {
+    url: 'https://api.example.com/webhooks/email',
+    timeout: 30,
+    retryAttempts: 3,
+    headers: {
+      'X-Custom-Header': 'value'
+    }
+  },
+  description: 'Webhook for support emails'
+})
+
+// Email forward endpoint
+const emailForward = await inbound.endpoints.create({
+  name: 'Forward to Gmail',
+  type: 'email',
+  config: {
+    forwardTo: 'team@gmail.com',
+    preserveHeaders: true
+  }
+})
+
+// Email group endpoint
+const emailGroup = await inbound.endpoints.create({
+  name: 'Team Distribution List',
+  type: 'email_group',
+  config: {
+    emails: ['alice@team.com', 'bob@team.com', 'carol@team.com'],
+    preserveHeaders: true
+  }
+})
+```
+</CodeGroup>
+
+### POST `/api/e2/endpoints`
+
+Create a new endpoint (webhook, email, or email_group) for the authenticated user.
+
+#### Request Parameters
+
+<ParamField path="name" type="string" required>
+  Name of the endpoint (1-255 characters).
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  Endpoint type: `webhook`, `email`, or `email_group`.
+</ParamField>
+
+<ParamField path="config" type="object" required>
+  Configuration object based on endpoint type.
+  
+  <Expandable title="Webhook Config">
+    <ParamField path="url" type="string" required>
+      Webhook URL to receive email notifications.
+    </ParamField>
+    
+    <ParamField path="timeout" type="number" default="30">
+      Request timeout in seconds (1-300).
+    </ParamField>
+    
+    <ParamField path="retryAttempts" type="number" default="3">
+      Number of retry attempts on failure (0-10).
+    </ParamField>
+    
+    <ParamField path="headers" type="object">
+      Custom headers to include with webhook requests.
+      
+      Example: `{ "X-Custom-Header": "value" }`
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Email Config">
+    <ParamField path="forwardTo" type="string" required>
+      Email address to forward emails to.
+    </ParamField>
+    
+    <ParamField path="preserveHeaders" type="boolean" default="false">
+      Whether to preserve original email headers when forwarding.
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Email Group Config">
+    <ParamField path="emails" type="string[]" required>
+      Array of email addresses (1-50 addresses).
+    </ParamField>
+    
+    <ParamField path="preserveHeaders" type="boolean" default="false">
+      Whether to preserve original email headers when forwarding.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="description" type="string">
+  Optional description (max 1000 characters).
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the endpoint.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Endpoint name.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Endpoint type: `webhook`, `email`, or `email_group`.
+</ResponseField>
+
+<ResponseField name="config" type="object">
+  Configuration object (includes `verificationToken` for webhooks).
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the endpoint is active.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Endpoint description.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  ID of the user who owns this endpoint.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the endpoint was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the endpoint was last updated.
+</ResponseField>
+
+<ResponseField name="groupEmails" type="string[]">
+  Array of group email addresses (only for email_group type).
+</ResponseField>
+
+<ResponseField name="deliveryStats" type="object">
+  Delivery statistics.
+  
+  <Expandable title="Delivery Stats Object">
+    <ResponseField name="total" type="number">
+      Total number of delivery attempts.
+    </ResponseField>
+    
+    <ResponseField name="successful" type="number">
+      Number of successful deliveries.
+    </ResponseField>
+    
+    <ResponseField name="failed" type="number">
+      Number of failed deliveries.
+    </ResponseField>
+    
+    <ResponseField name="lastDelivery" type="string">
+      ISO 8601 timestamp of last delivery attempt.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Webhook Response
+{
+  "id": "ep_abc123",
+  "name": "Support Webhook",
+  "type": "webhook",
+  "config": {
+    "url": "https://api.example.com/webhooks/email",
+    "timeout": 30,
+    "retryAttempts": 3,
+    "headers": {
+      "X-Custom-Header": "value"
+    },
+    "verificationToken": "wh_verify_abc123def456"
+  },
+  "isActive": true,
+  "description": "Webhook for support emails",
+  "userId": "usr_abc123",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z",
+  "groupEmails": null,
+  "deliveryStats": {
+    "total": 0,
+    "successful": 0,
+    "failed": 0,
+    "lastDelivery": null
+  }
+}
+```
+
+```json Email Group Response
+{
+  "id": "ep_xyz789",
+  "name": "Team Distribution List",
+  "type": "email_group",
+  "config": {
+    "emails": [
+      "alice@team.com",
+      "bob@team.com",
+      "carol@team.com"
+    ],
+    "preserveHeaders": true
+  },
+  "isActive": true,
+  "description": null,
+  "userId": "usr_abc123",
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z",
+  "groupEmails": [
+    "alice@team.com",
+    "bob@team.com",
+    "carol@team.com"
+  ],
+  "deliveryStats": {
+    "total": 0,
+    "successful": 0,
+    "failed": 0,
+    "lastDelivery": null
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## List Endpoints
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/endpoints?type=webhook&limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const endpoints = await inbound.endpoints.list({
+  type: 'webhook',
+  limit: 50
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/endpoints`
+
+Get paginated list of endpoints for authenticated user with optional filtering by type, active status, sort order, and search by name.
+
+#### Query Parameters
+
+<ParamField query="limit" type="integer" default="50">
+  Maximum number of endpoints to return (1-100).
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of endpoints to skip for pagination.
+</ParamField>
+
+<ParamField query="type" type="string">
+  Filter by endpoint type: `webhook`, `email`, or `email_group`.
+</ParamField>
+
+<ParamField query="active" type="string">
+  Filter by active status: `true` or `false`.
+</ParamField>
+
+<ParamField query="sortBy" type="string" default="newest">
+  Sort order: `newest` or `oldest`.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Search by name or configuration content (max 100 characters).
+</ParamField>
+
+#### Response
+
+<ResponseField name="data" type="array">
+  Array of endpoint objects (same structure as Create Endpoint response).
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+  
+  <Expandable title="Pagination Object">
+    <ResponseField name="limit" type="number">
+      Number of results per page.
+    </ResponseField>
+    
+    <ResponseField name="offset" type="number">
+      Number of results skipped.
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching endpoints.
+    </ResponseField>
+    
+    <ResponseField name="hasMore" type="boolean">
+      Whether there are more results available.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "ep_abc123",
+      "name": "Support Webhook",
+      "type": "webhook",
+      "config": {
+        "url": "https://api.example.com/webhooks/email",
+        "timeout": 30,
+        "retryAttempts": 3,
+        "headers": {
+          "X-Custom-Header": "value"
+        },
+        "verificationToken": "wh_verify_abc123def456"
+      },
+      "isActive": true,
+      "description": "Webhook for support emails",
+      "userId": "usr_abc123",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z",
+      "groupEmails": null,
+      "deliveryStats": {
+        "total": 150,
+        "successful": 147,
+        "failed": 3,
+        "lastDelivery": "2024-01-15T14:25:00Z"
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1,
+    "hasMore": false
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Endpoint
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const endpoint = await inbound.endpoints.get('ep_abc123')
+```
+</CodeGroup>
+
+### GET `/api/e2/endpoints/:id`
+
+Get a specific endpoint by ID with detailed information including delivery statistics.
+
+#### Response
+
+Same structure as Create Endpoint response.
+
+---
+
+## Update Endpoint
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Support Webhook",
+    "config": {
+      "url": "https://api.example.com/webhooks/new-email",
+      "timeout": 60
+    },
+    "isActive": true
+  }'
+```
+
+```typescript TypeScript SDK
+const endpoint = await inbound.endpoints.update('ep_abc123', {
+  name: 'Updated Support Webhook',
+  config: {
+    url: 'https://api.example.com/webhooks/new-email',
+    timeout: 60
+  },
+  isActive: true
+})
+```
+</CodeGroup>
+
+### PATCH `/api/e2/endpoints/:id`
+
+Update an endpoint's configuration, name, or active status.
+
+#### Request Parameters
+
+<ParamField path="name" type="string">
+  Updated name (1-255 characters).
+</ParamField>
+
+<ParamField path="config" type="object">
+  Updated configuration (same structure as create).
+</ParamField>
+
+<ParamField path="isActive" type="boolean">
+  Whether the endpoint should be active.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Updated description (max 1000 characters).
+</ParamField>
+
+#### Response
+
+Same structure as Create Endpoint response.
+
+---
+
+## Test Endpoint
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/endpoints/ep_abc123/test \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const result = await inbound.endpoints.test('ep_abc123')
+```
+</CodeGroup>
+
+### POST `/api/e2/endpoints/:id/test`
+
+Test an endpoint by sending a sample payload. Useful for verifying webhook URLs and email forwarding.
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the test was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable test result message.
+</ResponseField>
+
+<ResponseField name="responseTime" type="number">
+  Response time in milliseconds (for webhooks).
+</ResponseField>
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code (for webhooks).
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Webhook endpoint responded successfully",
+  "responseTime": 245,
+  "statusCode": 200
+}
+```
+</ResponseExample>
+
+---
+
+## Delete Endpoint
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.inbound.new/api/e2/endpoints/ep_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const result = await inbound.endpoints.delete('ep_abc123')
+```
+</CodeGroup>
+
+### DELETE `/api/e2/endpoints/:id`
+
+Delete an endpoint. Email addresses and domains using this endpoint will need to be reconfigured.
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message about the deletion result.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  ID of the deleted endpoint.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Endpoint deleted successfully",
+  "id": "ep_abc123"
+}
+```
+</ResponseExample>
+
+---
+
+## Webhook Verification
+
+All webhook endpoints automatically receive a `verificationToken` in their config. Use this token to verify that webhook requests are coming from Inbound:
+
+```typescript
+// Verify webhook signature
+const signature = request.headers.get('X-Inbound-Signature')
+const verificationToken = 'wh_verify_abc123def456' // From endpoint config
+
+if (signature !== verificationToken) {
+  return new Response('Invalid signature', { status: 401 })
+}
+
+// Process the email...
+```
+
+### Webhook Payload
+
+Webhooks receive the full email object:
+
+```json
+{
+  "id": "eml_abc123",
+  "type": "received",
+  "from": "sender@example.com",
+  "to": ["support@yourdomain.com"],
+  "subject": "Help needed",
+  "html": "<p>Email content</p>",
+  "text": "Email content",
+  "attachments": [],
+  "headers": {},
+  "receivedAt": "2024-01-15T10:30:00Z"
+}
+```

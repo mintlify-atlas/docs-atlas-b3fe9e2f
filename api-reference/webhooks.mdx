@@ -1,0 +1,618 @@
+---
+title: "Webhooks"
+description: "Receiving and verifying webhook events"
+---
+
+## Overview
+
+Webhooks allow Inbound to push email data to your application in real-time. When an email arrives at your configured address, Inbound sends an HTTP POST request to your webhook URL with the complete email payload.
+
+## Webhook Payload Structure
+
+Every webhook request includes a fully-typed payload:
+
+```typescript
+import type { InboundWebhookPayload } from 'inboundemail'
+```
+
+### Complete Payload Example
+
+```json
+{
+  "event": "email.received",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "email": {
+    "id": "inbnd_abc123def456ghi",
+    "messageId": "<unique@example.com>",
+    "from": {
+      "text": "John Doe <john@example.com>",
+      "addresses": [
+        {
+          "name": "John Doe",
+          "address": "john@example.com"
+        }
+      ]
+    },
+    "to": {
+      "text": "support@yourdomain.com",
+      "addresses": [
+        {
+          "name": null,
+          "address": "support@yourdomain.com"
+        }
+      ]
+    },
+    "recipient": "support@yourdomain.com",
+    "subject": "Help with my order",
+    "receivedAt": "2024-01-15T10:30:00Z",
+    "threadId": "thread_xyz789",
+    "threadPosition": 1,
+    "parsedData": {
+      "messageId": "<unique@example.com>",
+      "date": "2024-01-15T10:30:00.000Z",
+      "subject": "Help with my order",
+      "from": {
+        "text": "John Doe <john@example.com>",
+        "addresses": [
+          {
+            "name": "John Doe",
+            "address": "john@example.com"
+          }
+        ]
+      },
+      "to": {
+        "text": "support@yourdomain.com",
+        "addresses": [
+          {
+            "name": null,
+            "address": "support@yourdomain.com"
+          }
+        ]
+      },
+      "cc": null,
+      "bcc": null,
+      "replyTo": null,
+      "textBody": "Hello, I need help with my recent order...",
+      "htmlBody": "<p>Hello, I need help with my recent order...</p>",
+      "raw": "From: john@example.com\r\nTo: support@yourdomain.com\r\n...",
+      "attachments": [
+        {
+          "filename": "order-receipt.pdf",
+          "contentType": "application/pdf",
+          "size": 45678,
+          "contentId": "<att_abc123>",
+          "contentDisposition": "attachment",
+          "downloadUrl": "https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf"
+        }
+      ],
+      "headers": {},
+      "priority": "normal"
+    },
+    "cleanedContent": {
+      "html": "<p>Hello, I need help with my recent order...</p>",
+      "text": "Hello, I need help with my recent order...",
+      "hasHtml": true,
+      "hasText": true,
+      "attachments": [
+        {
+          "filename": "order-receipt.pdf",
+          "contentType": "application/pdf",
+          "size": 45678,
+          "downloadUrl": "https://inbound.new/api/e2/attachments/inbnd_abc123def456ghi/order-receipt.pdf"
+        }
+      ],
+      "headers": {}
+    }
+  },
+  "endpoint": {
+    "id": "endp_xyz789",
+    "name": "Support Webhook",
+    "type": "webhook"
+  }
+}
+```
+
+## Payload Fields
+
+<ParamField body="event" type="string" required>
+  Event type. Currently only `"email.received"`
+</ParamField>
+
+<ParamField body="timestamp" type="string" required>
+  ISO 8601 timestamp when the webhook was triggered
+</ParamField>
+
+<ParamField body="email" type="object" required>
+  Complete email data
+  
+  <ParamField body="id" type="string" required>
+    Unique email identifier (e.g., `inbnd_abc123`)
+  </ParamField>
+  
+  <ParamField body="messageId" type="string" required>
+    RFC 5322 Message-ID header
+  </ParamField>
+  
+  <ParamField body="from" type="object" required>
+    Sender information with text and parsed addresses
+  </ParamField>
+  
+  <ParamField body="to" type="object" required>
+    Recipient information with text and parsed addresses
+  </ParamField>
+  
+  <ParamField body="recipient" type="string" required>
+    The email address that received this message
+  </ParamField>
+  
+  <ParamField body="subject" type="string" required>
+    Email subject line
+  </ParamField>
+  
+  <ParamField body="receivedAt" type="string" required>
+    ISO 8601 timestamp when email was received
+  </ParamField>
+  
+  <ParamField body="threadId" type="string">
+    Thread identifier for conversation tracking
+  </ParamField>
+  
+  <ParamField body="threadPosition" type="number">
+    Position in the email thread (1 for first email)
+  </ParamField>
+  
+  <ParamField body="parsedData" type="object" required>
+    Raw parsed email data including headers, body, and attachments
+  </ParamField>
+  
+  <ParamField body="cleanedContent" type="object" required>
+    Cleaned/processed email content ready for display
+  </ParamField>
+</ParamField>
+
+<ParamField body="endpoint" type="object" required>
+  Webhook endpoint information
+  
+  <ParamField body="id" type="string" required>
+    Endpoint identifier
+  </ParamField>
+  
+  <ParamField body="name" type="string" required>
+    Human-readable endpoint name
+  </ParamField>
+  
+  <ParamField body="type" type="string" required>
+    Endpoint type: `"webhook"`, `"email"`, or `"email_group"`
+  </ParamField>
+</ParamField>
+
+## Implementing a Webhook Handler
+
+### Basic Handler
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import type { InboundWebhookPayload } from 'inboundemail'
+import { isInboundWebhookPayload } from 'inboundemail'
+
+export async function POST(request: NextRequest) {
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    
+    // Verify this is a valid Inbound webhook
+    if (!isInboundWebhookPayload(payload)) {
+      return NextResponse.json(
+        { error: 'Invalid webhook payload' },
+        { status: 400 }
+      )
+    }
+    
+    const { email } = payload
+    console.log(`📧 Received email: ${email.subject} from ${email.from.addresses[0]?.address}`)
+    
+    // Process the email
+    await processEmail(email)
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+### With Auto-Reply
+
+```typescript
+import { Inbound, type InboundWebhookPayload, isInboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    
+    if (!isInboundWebhookPayload(payload)) {
+      return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+    }
+    
+    const { email } = payload
+    
+    // Auto-reply to support emails
+    if (email.subject?.toLowerCase().includes('support')) {
+      await inbound.reply(email, {
+        from: 'support@yourdomain.com',
+        text: "Thanks for contacting support! We'll get back to you within 24 hours.",
+        tags: [{ name: 'type', value: 'auto-reply' }]
+      })
+    }
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+  }
+}
+```
+
+## Signature Verification
+
+<Warning>
+  **Always verify webhook signatures** in production to ensure requests are from Inbound.
+</Warning>
+
+### Security Headers
+
+Webhook requests include verification headers:
+
+```http
+POST /webhook/email HTTP/1.1
+Host: yourapp.com
+Content-Type: application/json
+X-Inbound-Signature: a7b3f2c9e1d4...
+X-Webhook-Verification-Token: token_abc123
+```
+
+### Verifying Signatures
+
+```typescript
+import crypto from 'crypto'
+import { NextRequest, NextResponse } from 'next/server'
+
+/**
+ * Verifies the webhook signature to ensure the request is from Inbound
+ */
+function verifyWebhookSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  const hmac = crypto.createHmac('sha256', secret)
+  const digest = hmac.update(payload).digest('hex')
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(digest)
+  )
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Get the webhook secret from environment
+    const webhookSecret = process.env.INBOUND_WEBHOOK_SECRET
+    if (!webhookSecret) {
+      throw new Error('INBOUND_WEBHOOK_SECRET not configured')
+    }
+    
+    // Get the signature from headers
+    const signature = request.headers.get('x-inbound-signature')
+    if (!signature) {
+      return NextResponse.json(
+        { error: 'Missing signature' },
+        { status: 401 }
+      )
+    }
+    
+    // Get the raw body
+    const body = await request.text()
+    
+    // Verify the signature
+    const isValid = verifyWebhookSignature(body, signature, webhookSecret)
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Invalid signature' },
+        { status: 401 }
+      )
+    }
+    
+    // Parse and process the verified payload
+    const data = JSON.parse(body)
+    console.log('Verified webhook data:', data)
+    
+    // Process your email here
+    // ...
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook verification error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+### Using the SDK Helper
+
+```typescript
+import { Inbound, verifyWebhookFromHeaders, type InboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  try {
+    // Verify webhook signature
+    const isValid = await verifyWebhookFromHeaders(
+      request.headers,
+      await request.text(),
+      process.env.INBOUND_WEBHOOK_SECRET!
+    )
+    
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Invalid signature' },
+        { status: 401 }
+      )
+    }
+    
+    const payload: InboundWebhookPayload = await request.json()
+    
+    // Process verified webhook
+    await processEmail(payload.email)
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+## Retry Logic
+
+Inbound automatically retries failed webhook deliveries:
+
+- **Initial attempt**: Immediate delivery
+- **Retry 1**: After 1 minute
+- **Retry 2**: After 5 minutes
+- **Retry 3**: After 15 minutes
+- **Retry 4**: After 1 hour
+
+### HTTP Response Codes
+
+Your webhook endpoint should return:
+
+- **2xx**: Success - no retry
+- **4xx**: Client error - no retry (except 429)
+- **429**: Rate limited - will retry
+- **5xx**: Server error - will retry
+
+### Idempotency
+
+Make your webhook handler idempotent to handle duplicate deliveries:
+
+```typescript
+const processedEmails = new Set<string>()
+
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  const emailId = payload.email.id
+  
+  // Check if already processed
+  if (processedEmails.has(emailId)) {
+    console.log(`Email ${emailId} already processed, skipping`)
+    return NextResponse.json({ success: true })
+  }
+  
+  // Process email
+  await processEmail(payload.email)
+  
+  // Mark as processed
+  processedEmails.add(emailId)
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+Or use a database:
+
+```typescript
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  
+  // Use database transaction for idempotency
+  const existingEmail = await db
+    .select()
+    .from(processedEmails)
+    .where(eq(processedEmails.emailId, payload.email.id))
+    .limit(1)
+  
+  if (existingEmail.length > 0) {
+    return NextResponse.json({ success: true })
+  }
+  
+  // Process and record
+  await db.transaction(async (tx) => {
+    await processEmail(payload.email)
+    await tx.insert(processedEmails).values({
+      emailId: payload.email.id,
+      processedAt: new Date()
+    })
+  })
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Best Practices
+
+### 1. Return Quickly
+
+Respond within 10 seconds to avoid timeouts:
+
+```typescript
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  
+  // Queue for background processing
+  await queue.add('process-email', payload.email)
+  
+  // Return immediately
+  return NextResponse.json({ success: true })
+}
+```
+
+### 2. Log Webhook Events
+
+```typescript
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  
+  console.log('Webhook received:', {
+    emailId: payload.email.id,
+    from: payload.email.from.addresses[0]?.address,
+    subject: payload.email.subject,
+    timestamp: payload.timestamp
+  })
+  
+  // Process...
+}
+```
+
+### 3. Handle Errors Gracefully
+
+```typescript
+export async function POST(request: NextRequest) {
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    
+    await processEmail(payload.email)
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook processing failed:', error)
+    
+    // Return 5xx to trigger retry
+    return NextResponse.json(
+      { error: 'Processing failed', details: error.message },
+      { status: 500 }
+    )
+  }
+}
+```
+
+### 4. Validate Payload Structure
+
+```typescript
+import { isInboundWebhookPayload } from 'inboundemail'
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  
+  if (!isInboundWebhookPayload(payload)) {
+    console.error('Invalid webhook payload structure')
+    return NextResponse.json(
+      { error: 'Invalid payload' },
+      { status: 400 }
+    )
+  }
+  
+  // Safely access typed payload
+  const { email } = payload
+}
+```
+
+### 5. Monitor Webhook Health
+
+Track webhook delivery success in your dashboard:
+
+```typescript
+import { metrics } from '@/lib/monitoring'
+
+export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+  
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    await processEmail(payload.email)
+    
+    metrics.increment('webhook.success')
+    metrics.timing('webhook.duration', Date.now() - startTime)
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    metrics.increment('webhook.error')
+    throw error
+  }
+}
+```
+
+## Testing Webhooks
+
+### Local Development
+
+Use ngrok or similar tools to expose your local server:
+
+```bash
+# Start your dev server
+npm run dev
+
+# In another terminal, expose it
+ngrok http 3000
+
+# Use the ngrok URL in your webhook configuration
+https://abc123.ngrok.io/api/webhook/email
+```
+
+### Test Endpoint
+
+Use the API to send test webhooks:
+
+```bash
+curl -X POST "https://inbound.new/api/e2/endpoints/endp_xyz789/test" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+This sends a mock email payload to your webhook URL.
+
+## Troubleshooting
+
+### Webhooks Not Received
+
+1. **Check endpoint URL** - Ensure it's publicly accessible
+2. **Verify endpoint is active** - Check in the dashboard
+3. **Check logs** - Look for delivery errors
+4. **Test manually** - Use the test endpoint feature
+
+### Failed Deliveries
+
+1. **Check response codes** - Must return 2xx for success
+2. **Check timeout** - Must respond within 10 seconds
+3. **Verify SSL certificate** - Must be valid for HTTPS endpoints
+4. **Check firewall** - Ensure Inbound IPs aren't blocked

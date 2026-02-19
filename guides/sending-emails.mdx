@@ -1,0 +1,363 @@
+---
+title: 'Sending Emails'
+description: 'Learn how to send transactional emails with HTML, text, attachments, and scheduling'
+---
+
+## Overview
+
+Send transactional emails programmatically using the Inbound API. This guide covers everything from basic sending to advanced features like scheduled emails, attachments, and custom headers.
+
+## Basic Email Sending
+
+### Minimal Example
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+const email = await inbound.emails.send({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  text: 'Thanks for signing up!'
+})
+
+console.log(`Email sent: ${email.id}`)
+```
+
+### With Display Name
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'Inbound Team <hello@yourdomain.com>',
+  to: 'John Doe <user@example.com>',
+  subject: 'Welcome aboard!',
+  text: 'We\'re excited to have you.'
+})
+```
+
+## HTML and Text Content
+
+<Warning>
+  **Either `html` or `text` must be provided.** It's recommended to include both for maximum compatibility.
+</Warning>
+
+### HTML Email with Fallback
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'notifications@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Order Confirmation #12345',
+  html: `
+    <div style="font-family: Arial, sans-serif;">
+      <h1>Order Confirmed!</h1>
+      <p>Thanks for your order. We'll send tracking info soon.</p>
+      <a href="https://yourapp.com/orders/12345" style="
+        background: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 4px;
+        display: inline-block;
+      ">View Order</a>
+    </div>
+  `,
+  text: `
+Order Confirmed!
+
+Thanks for your order. We'll send tracking info soon.
+
+View your order: https://yourapp.com/orders/12345
+  `.trim()
+})
+```
+
+## Multiple Recipients
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'team@yourdomain.com',
+  to: ['user1@example.com', 'user2@example.com'],
+  cc: 'manager@example.com',
+  bcc: ['admin@yourdomain.com', 'logs@yourdomain.com'],
+  subject: 'Project Update',
+  html: '<p>Here\'s the latest on the project...</p>'
+})
+```
+
+## Tags and Metadata
+
+Add tags to track and categorize your emails for analytics:
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  html: '<p>Thanks for signing up!</p>',
+  tags: [
+    { name: 'campaign', value: 'welcome' },
+    { name: 'user_type', value: 'free_trial' },
+    { name: 'region', value: 'us-west' }
+  ]
+})
+```
+
+## Custom Headers
+
+Add custom email headers for advanced use cases:
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'support@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Support Ticket #789',
+  text: 'Your ticket has been received.',
+  headers: {
+    'X-Ticket-ID': '789',
+    'X-Priority': 'high',
+    'X-Category': 'billing'
+  }
+})
+```
+
+## Scheduled Emails
+
+Schedule emails to be sent at a specific time:
+
+<Steps>
+  <Step title="ISO 8601 Format">
+    Use standard ISO 8601 datetime strings:
+    
+    ```javascript
+    const email = await inbound.emails.send({
+      from: 'reminders@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Meeting Reminder',
+      text: 'Your meeting starts in 1 hour.',
+      scheduled_at: '2026-03-15T14:30:00Z'
+    })
+    
+    console.log(email.status) // "scheduled"
+    console.log(email.scheduled_at) // "2026-03-15T14:30:00.000Z"
+    ```
+  </Step>
+  
+  <Step title="Natural Language">
+    Use natural language with timezone support:
+    
+    ```javascript
+    const email = await inbound.emails.send({
+      from: 'reminders@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Meeting Reminder',
+      text: 'Your meeting starts soon.',
+      scheduled_at: 'tomorrow at 9am',
+      timezone: 'America/New_York'
+    })
+    ```
+    
+    Supported formats:
+    - `"tomorrow at 9am"`
+    - `"next monday at 2pm"`
+    - `"in 2 hours"`
+    - `"march 15 at 3:30pm"`
+  </Step>
+  
+  <Step title="Validation Rules">
+    <Warning>
+      - Scheduled time must be at least 5 minutes in the future
+      - Maximum scheduling window is 90 days
+      - Invalid dates will return a 400 error
+    </Warning>
+  </Step>
+</Steps>
+
+## Reply-To Address
+
+Specify where replies should be sent:
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'noreply@yourdomain.com',
+  to: 'user@example.com',
+  reply_to: 'support@yourdomain.com',
+  subject: 'Password Reset',
+  html: '<p>Click here to reset your password...</p>'
+})
+```
+
+Multiple reply-to addresses:
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'team@yourdomain.com',
+  to: 'user@example.com',
+  reply_to: ['support@yourdomain.com', 'sales@yourdomain.com'],
+  subject: 'Product Inquiry',
+  text: 'Thanks for your interest!'
+})
+```
+
+## Attachments
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'invoices@yourdomain.com',
+  to: 'customer@example.com',
+  subject: 'Invoice #12345',
+  html: '<p>Please find your invoice attached.</p>',
+  attachments: [
+    {
+      filename: 'invoice-12345.pdf',
+      content: 'base64EncodedContent...',
+      content_type: 'application/pdf'
+    },
+    {
+      filename: 'receipt.png',
+      content: 'base64EncodedImageContent...',
+      content_type: 'image/png'
+    }
+  ]
+})
+```
+
+<Note>
+  Learn more about working with attachments in the [Attachments Guide](/guides/attachments).
+</Note>
+
+## Idempotency
+
+Prevent duplicate sends with idempotency keys:
+
+```javascript
+const idempotencyKey = `order-confirmation-${orderId}`
+
+const email = await inbound.emails.send({
+  from: 'orders@yourdomain.com',
+  to: 'customer@example.com',
+  subject: 'Order Confirmation',
+  html: '<p>Your order has been confirmed!</p>'
+}, {
+  headers: {
+    'Idempotency-Key': idempotencyKey
+  }
+})
+```
+
+If you send the same request with the same idempotency key within 24 hours, you'll receive the original email record instead of creating a duplicate.
+
+## Error Handling
+
+```javascript
+try {
+  const email = await inbound.emails.send({
+    from: 'hello@yourdomain.com',
+    to: 'user@example.com',
+    subject: 'Welcome',
+    text: 'Thanks for joining!'
+  })
+  
+  console.log('Email sent:', email.id)
+} catch (error) {
+  if (error.status === 403) {
+    console.error('Domain not verified')
+  } else if (error.status === 429) {
+    console.error('Rate limit exceeded')
+  } else if (error.status === 400) {
+    console.error('Invalid email format:', error.message)
+  } else {
+    console.error('Failed to send:', error.message)
+  }
+}
+```
+
+## Complete Example
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+async function sendWelcomeEmail(user) {
+  try {
+    const email = await inbound.emails.send({
+      from: 'Acme Team <hello@acme.com>',
+      to: `${user.name} <${user.email}>`,
+      subject: 'Welcome to Acme!',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+          <h1>Welcome, ${user.name}! 👋</h1>
+          <p>We're thrilled to have you on board.</p>
+          <p>Here's what you can do next:</p>
+          <ul>
+            <li>Complete your profile</li>
+            <li>Connect your first integration</li>
+            <li>Invite team members</li>
+          </ul>
+          <a href="https://app.acme.com/onboarding" style="
+            background: #4F46E5;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            display: inline-block;
+            margin-top: 16px;
+          ">Get Started</a>
+        </div>
+      `,
+      text: `
+Welcome, ${user.name}!
+
+We're thrilled to have you on board.
+
+Here's what you can do next:
+- Complete your profile
+- Connect your first integration
+- Invite team members
+
+Get started: https://app.acme.com/onboarding
+      `.trim(),
+      tags: [
+        { name: 'type', value: 'welcome' },
+        { name: 'user_id', value: user.id }
+      ],
+      headers: {
+        'X-User-ID': user.id
+      }
+    })
+    
+    console.log(`Welcome email sent: ${email.id}`)
+    return email
+  } catch (error) {
+    console.error('Failed to send welcome email:', error)
+    throw error
+  }
+}
+
+// Usage
+await sendWelcomeEmail({
+  id: 'user_123',
+  name: 'Jane Doe',
+  email: 'jane@example.com'
+})
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Receiving Emails" icon="inbox" href="/guides/receiving-emails">
+    Set up webhooks to receive inbound emails
+  </Card>
+  <Card title="Replying" icon="reply" href="/guides/replying-to-emails">
+    Reply to emails with proper threading
+  </Card>
+  <Card title="Attachments" icon="paperclip" href="/guides/attachments">
+    Handle file attachments in emails
+  </Card>
+  <Card title="Domain Setup" icon="globe" href="/guides/domain-setup">
+    Verify your domain for sending
+  </Card>
+</CardGroup>

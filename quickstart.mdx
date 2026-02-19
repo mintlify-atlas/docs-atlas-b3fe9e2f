@@ -1,80 +1,295 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get from zero to working email infrastructure in under 5 minutes'
 ---
 
-## Get started in three steps
+# Quickstart Guide
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+Get Inbound up and running in your application in less than 5 minutes. This guide will walk you through installing the SDK, setting up your first domain, and receiving your first webhook.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  You'll need an API key from [inbound.new](https://inbound.new) to follow this guide.
 </Note>
+
+<Steps>
+  <Step title="Install the SDK">
+    Install the Inbound SDK using your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install inboundemail
+      ```
+
+      ```bash yarn
+      yarn add inboundemail
+      ```
+
+      ```bash bun
+      bun add inboundemail
+      ```
+
+      ```bash pnpm
+      pnpm add inboundemail
+      ```
+    </CodeGroup>
+
+    <Tip>
+      The SDK is fully typed with TypeScript and works with Node.js, Bun, and all modern JavaScript frameworks.
+    </Tip>
+  </Step>
+
+  <Step title="Initialize with your API key">
+    Create an Inbound client with your API key. Get your key from [inbound.new](https://inbound.new).
+
+    ```javascript
+    import { Inbound } from 'inboundemail'
+
+    // Get your API key from inbound.new
+    const inbound = new Inbound(process.env.INBOUND_API_KEY)
+    ```
+
+    <Note>
+      Store your API key in environment variables - never commit it to version control.
+    </Note>
+  </Step>
+
+  <Step title="Add your domain">
+    Add a domain to start receiving emails. Inbound will provide DNS records to configure.
+
+    ```javascript
+    const domain = await inbound.domains.create({
+      domain: "yourdomain.com"
+    })
+
+    console.log("Domain added:", domain.domain)
+    console.log("Configure these DNS records:", domain.dnsRecords)
+    ```
+
+    After adding your domain, you'll receive DNS records to add to your domain provider:
+    - **MX Record**: Routes incoming email to Inbound
+    - **TXT Record**: Verifies domain ownership
+    - **DKIM Records**: Improves email deliverability
+
+    <Tip>
+      Domain verification is automatic once DNS records are configured. Check status with `inbound.domains.get(domain.id)`.
+    </Tip>
+  </Step>
+
+  <Step title="Create an email address">
+    Create an email address that triggers a webhook when it receives mail.
+
+    ```javascript
+    const emailAddress = await inbound.emailAddresses.create({
+      address: "hello@yourdomain.com",
+      webhookUrl: "https://yourapp.com/webhook/email"
+    })
+
+    console.log("Email address created:", emailAddress.address)
+    console.log("Webhook URL:", emailAddress.webhookUrl)
+    ```
+
+    <Note>
+      Your webhook URL must be publicly accessible and return a 200 status code within 30 seconds.
+    </Note>
+  </Step>
+
+  <Step title="Handle incoming webhooks">
+    Create a webhook endpoint to receive and process incoming emails.
+
+    ```javascript
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+    import { NextRequest, NextResponse } from 'next/server'
+
+    const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+    export async function POST(request: NextRequest) {
+      try {
+        const payload = await request.json()
+        
+        // Verify this is a valid Inbound webhook
+        if (!isInboundWebhookPayload(payload)) {
+          return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+        }
+        
+        const { email } = payload
+        console.log(`📧 Received email: ${email.subject} from ${email.from?.addresses?.[0]?.address}`)
+        
+        // Auto-reply to support emails
+        if (email.subject?.toLowerCase().includes('support')) {
+          await inbound.reply(email, {
+            from: 'support@yourdomain.com',
+            text: 'Thanks for contacting support! We\'ll get back to you within 24 hours.',
+            tags: [{ name: 'type', value: 'auto-reply' }]
+          })
+        }
+        
+        return NextResponse.json({ success: true })
+      } catch (error) {
+        console.error('Webhook error:', error)
+        return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
+      }
+    }
+    ```
+
+    The webhook payload includes:
+    - **Parsed email content**: Subject, sender, recipients, HTML and text body
+    - **Attachments**: Download URLs for all attachments
+    - **Headers**: Full email headers for advanced processing
+    - **Metadata**: Message ID, timestamps, and routing information
+
+    <Tip>
+      Use the `inbound.reply()` method to reply to emails while maintaining the conversation thread.
+    </Tip>
+  </Step>
+
+  <Step title="Test your setup">
+    Send a test email to verify everything is working:
+
+    ```bash
+    # Send a test email from the command line
+    echo "Test email body" | mail -s "Test Subject" hello@yourdomain.com
+    ```
+
+    Or use the test webhook script from the Inbound repository:
+
+    ```bash
+    bun run inbound-webhook-test hello@yourdomain.com
+    ```
+
+    Check your webhook endpoint logs to see the parsed email content.
+  </Step>
+</Steps>
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Send Emails" icon="paper-plane" href="/guides/sending-emails">
+    Learn how to send transactional emails with tags and attachments
+  </Card>
+  
+  <Card title="Email Threading" icon="comments" href="/guides/email-threads">
+    Handle email threads and conversations automatically
+  </Card>
+  
+  <Card title="Webhook Security" icon="shield" href="/guides/webhook-verification">
+    Verify webhook signatures to ensure requests are from Inbound
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Common Use Cases
+
+<AccordionGroup>
+  <Accordion title="Support Ticket System">
+    Create a support ticket from every email sent to support@yourdomain.com:
+
+    ```javascript
+    export async function POST(request: NextRequest) {
+      const payload = await request.json()
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+      }
+      
+      const { email } = payload
+      
+      // Create support ticket
+      const ticket = await createTicket({
+        from: email.from?.addresses?.[0]?.address,
+        subject: email.subject,
+        content: email.cleanedContent.text,
+        attachments: email.cleanedContent.attachments
+      })
+      
+      // Send confirmation email
+      await inbound.reply(email, {
+        from: 'support@yourdomain.com',
+        html: `<p>Thanks for contacting support! Your ticket #${ticket.id} has been created.</p>`
+      })
+      
+      return NextResponse.json({ success: true, ticketId: ticket.id })
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Email-to-Task Converter">
+    Convert emails to tasks in your project management tool:
+
+    ```javascript
+    export async function POST(request: NextRequest) {
+      const payload = await request.json()
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+      }
+      
+      const { email } = payload
+      
+      // Parse task from email subject
+      const taskTitle = email.subject?.replace(/^task:/i, '').trim()
+      
+      // Create task in your system
+      const task = await createTask({
+        title: taskTitle,
+        description: email.cleanedContent.text,
+        assignee: email.from?.addresses?.[0]?.address,
+        attachments: email.cleanedContent.attachments.map(a => a.downloadUrl)
+      })
+      
+      return NextResponse.json({ success: true, taskId: task.id })
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Newsletter Reply Handling">
+    Process replies to your newsletters and handle unsubscribes:
+
+    ```javascript
+    export async function POST(request: NextRequest) {
+      const payload = await request.json()
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+      }
+      
+      const { email } = payload
+      const senderEmail = email.from?.addresses?.[0]?.address
+      
+      // Handle unsubscribe requests
+      if (email.subject?.toLowerCase().includes('unsubscribe') || 
+          email.cleanedContent.text?.toLowerCase().includes('unsubscribe')) {
+        await unsubscribeUser(senderEmail)
+        
+        await inbound.reply(email, {
+          from: 'newsletter@yourdomain.com',
+          text: 'You have been unsubscribed from our newsletter.'
+        })
+        
+        return NextResponse.json({ success: true, action: 'unsubscribed' })
+      }
+      
+      // Log other replies for review
+      await logNewsletterReply({
+        from: senderEmail,
+        subject: email.subject,
+        content: email.cleanedContent.text
+      })
+      
+      return NextResponse.json({ success: true, action: 'logged' })
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Need Help?
+
+<Card title="Join the Community" icon="discord" href="https://discord.gg/inbound">
+  Get help from the Inbound community and share your use cases
+</Card>
+
+<Tip>
+  Having issues? Check your webhook endpoint returns a 200 status code and your DNS records are properly configured.
+</Tip>

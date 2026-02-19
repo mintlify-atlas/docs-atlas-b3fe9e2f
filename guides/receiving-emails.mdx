@@ -1,0 +1,517 @@
+---
+title: 'Receiving Emails'
+description: 'Set up webhooks to receive and process incoming emails in real-time'
+---
+
+## Overview
+
+Inbound processes incoming emails and sends them to your webhook endpoint as structured JSON payloads. This guide shows you how to set up and handle incoming emails.
+
+## How It Works
+
+<Steps>
+  <Step title="Configure Email Address">
+    Create an email address and specify your webhook URL:
+    
+    ```javascript
+    const emailAddress = await inbound.emailAddresses.create({
+      address: 'support@yourdomain.com',
+      webhookUrl: 'https://yourapp.com/api/webhooks/inbound'
+    })
+    ```
+  </Step>
+  
+  <Step title="Receive Email">
+    When someone sends an email to `support@yourdomain.com`, Inbound:
+    1. Receives and parses the email
+    2. Extracts headers, body, and attachments
+    3. Sends a POST request to your webhook URL
+  </Step>
+  
+  <Step title="Process in Your App">
+    Your webhook handler receives the structured email data and processes it.
+  </Step>
+</Steps>
+
+## Webhook Payload
+
+Every incoming email triggers a POST request with this structure:
+
+```json
+{
+  "type": "email.received",
+  "email": {
+    "id": "email_abc123",
+    "message_id": "<CABcd123@mail.gmail.com>",
+    "subject": "Question about pricing",
+    "from": {
+      "text": "John Doe <john@example.com>",
+      "addresses": [
+        {
+          "name": "John Doe",
+          "address": "john@example.com"
+        }
+      ]
+    },
+    "to": {
+      "text": "support@yourdomain.com",
+      "addresses": [
+        {
+          "address": "support@yourdomain.com"
+        }
+      ]
+    },
+    "date": "2026-02-19T10:30:00.000Z",
+    "text_body": "Hi, I have a question about your pricing plans...",
+    "html_body": "<p>Hi, I have a question about your pricing plans...</p>",
+    "attachments": [],
+    "headers": {
+      "received": ["from mail.example.com..."],
+      "content-type": "text/plain; charset=UTF-8"
+    }
+  }
+}
+```
+
+## Next.js Webhook Handler
+
+### App Router (Next.js 13+)
+
+```typescript app/api/webhooks/inbound/route.ts
+import { Inbound, type InboundWebhookPayload, isInboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  try {
+    const payload: InboundWebhookPayload = await request.json()
+    
+    // Verify this is a valid Inbound webhook
+    if (!isInboundWebhookPayload(payload)) {
+      console.error('Invalid webhook payload')
+      return NextResponse.json(
+        { error: 'Invalid webhook' },
+        { status: 400 }
+      )
+    }
+    
+    const { email } = payload
+    
+    console.log('Received email:', {
+      id: email.id,
+      from: email.from?.addresses?.[0]?.address,
+      subject: email.subject
+    })
+    
+    // Extract sender info
+    const senderEmail = email.from?.addresses?.[0]?.address || 'unknown'
+    const senderName = email.from?.addresses?.[0]?.name || senderEmail
+    
+    // Process based on subject or content
+    if (email.subject?.toLowerCase().includes('support')) {
+      await handleSupportEmail(email)
+    } else if (email.subject?.toLowerCase().includes('billing')) {
+      await handleBillingEmail(email)
+    } else {
+      await handleGeneralEmail(email)
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
+    )
+  }
+}
+
+async function handleSupportEmail(email: any) {
+  // Create support ticket
+  console.log('Creating support ticket for:', email.subject)
+  
+  // Auto-reply
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    text: 'Thanks for contacting support! We\'ll get back to you within 24 hours.',
+    tags: [{ name: 'type', value: 'auto-reply' }]
+  })
+}
+
+async function handleBillingEmail(email: any) {
+  // Forward to billing team
+  console.log('Forwarding billing inquiry')
+}
+
+async function handleGeneralEmail(email: any) {
+  // Log for review
+  console.log('General inquiry received')
+}
+```
+
+### Pages Router (Next.js 12)
+
+```typescript pages/api/webhooks/inbound.ts
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { Inbound, type InboundWebhookPayload, isInboundWebhookPayload } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  try {
+    const payload: InboundWebhookPayload = req.body
+    
+    if (!isInboundWebhookPayload(payload)) {
+      return res.status(400).json({ error: 'Invalid webhook' })
+    }
+    
+    const { email } = payload
+    console.log('Received email from:', email.from?.addresses?.[0]?.address)
+    
+    // Process email
+    await processIncomingEmail(email)
+    
+    return res.status(200).json({ success: true })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return res.status(500).json({ error: 'Processing failed' })
+  }
+}
+
+async function processIncomingEmail(email: any) {
+  // Your email processing logic
+}
+```
+
+## Express.js Handler
+
+```javascript
+const express = require('express')
+const { Inbound, isInboundWebhookPayload } = require('inboundemail')
+
+const app = express()
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+app.use(express.json())
+
+app.post('/webhooks/inbound', async (req, res) => {
+  try {
+    const payload = req.body
+    
+    if (!isInboundWebhookPayload(payload)) {
+      return res.status(400).json({ error: 'Invalid webhook' })
+    }
+    
+    const { email } = payload
+    
+    console.log('📧 New email received:', {
+      id: email.id,
+      from: email.from?.addresses?.[0]?.address,
+      subject: email.subject,
+      hasAttachments: email.attachments?.length > 0
+    })
+    
+    // Extract text body
+    const textBody = email.text_body || ''
+    
+    // Check for keywords
+    if (textBody.toLowerCase().includes('urgent')) {
+      await handleUrgentEmail(email)
+    }
+    
+    // Auto-reply to new contacts
+    const isNewContact = await checkIfNewContact(email.from?.addresses?.[0]?.address)
+    if (isNewContact) {
+      await inbound.reply(email, {
+        from: 'hello@yourdomain.com',
+        html: '<p>Thanks for reaching out! We\'ll respond soon.</p>'
+      })
+    }
+    
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Webhook processing error:', error)
+    res.status(500).json({ error: 'Processing failed' })
+  }
+})
+
+app.listen(3000, () => {
+  console.log('Webhook server running on port 3000')
+})
+```
+
+## Extracting Data
+
+### Sender Information
+
+```javascript
+const { email } = payload
+
+// Get sender email
+const senderEmail = email.from?.addresses?.[0]?.address || 'unknown'
+
+// Get sender name (if provided)
+const senderName = email.from?.addresses?.[0]?.name || null
+
+// Full formatted sender
+const senderFull = email.from?.text || senderEmail
+
+console.log('From:', senderName ? `${senderName} <${senderEmail}>` : senderEmail)
+```
+
+### Recipients
+
+```javascript
+// Primary recipients
+const toAddresses = email.to?.addresses?.map(addr => addr.address) || []
+
+// CC recipients
+const ccAddresses = email.cc?.addresses?.map(addr => addr.address) || []
+
+// BCC recipients (usually not visible in received emails)
+const bccAddresses = email.bcc?.addresses?.map(addr => addr.address) || []
+
+console.log('Recipients:', { to: toAddresses, cc: ccAddresses })
+```
+
+### Subject and Body
+
+```javascript
+const subject = email.subject || 'No Subject'
+const textBody = email.text_body || ''
+const htmlBody = email.html_body || null
+
+// Text preview (first 100 characters)
+const preview = textBody.substring(0, 100)
+
+console.log('Subject:', subject)
+console.log('Preview:', preview)
+```
+
+### Attachments
+
+```javascript
+const hasAttachments = email.attachments && email.attachments.length > 0
+
+if (hasAttachments) {
+  email.attachments.forEach(attachment => {
+    console.log('Attachment:', {
+      filename: attachment.filename,
+      contentType: attachment.content_type,
+      size: attachment.size
+    })
+  })
+}
+```
+
+<Note>
+  Learn more about downloading attachments in the [Attachments Guide](/guides/attachments).
+</Note>
+
+### Headers
+
+```javascript
+// Access specific headers
+const messageId = email.message_id
+const date = email.date
+const inReplyTo = email.headers?.['in-reply-to'] || null
+const references = email.headers?.references || []
+
+console.log('Message-ID:', messageId)
+console.log('In-Reply-To:', inReplyTo)
+```
+
+## Common Use Cases
+
+### Auto-Reply System
+
+```javascript
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  
+  if (!isInboundWebhookPayload(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  const { email } = payload
+  
+  // Auto-reply to all emails
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    text: `
+Hi ${email.from?.addresses?.[0]?.name || 'there'},
+
+Thanks for your email! We've received your message and will respond within 24 hours.
+
+Best regards,
+Support Team
+    `.trim()
+  })
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Support Ticket Creation
+
+```javascript
+async function createSupportTicket(email: any) {
+  const ticket = {
+    title: email.subject,
+    description: email.text_body,
+    customer_email: email.from?.addresses?.[0]?.address,
+    customer_name: email.from?.addresses?.[0]?.name,
+    attachments: email.attachments?.map(a => a.filename),
+    received_at: email.date,
+    email_id: email.id
+  }
+  
+  // Save to your database
+  const savedTicket = await db.tickets.create(ticket)
+  
+  // Send confirmation
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    html: `
+      <p>Hi ${ticket.customer_name || 'there'},</p>
+      <p>We've created ticket <strong>#${savedTicket.id}</strong> for your inquiry.</p>
+      <p>You can track the status at: <a href="https://yourapp.com/tickets/${savedTicket.id}">View Ticket</a></p>
+    `
+  })
+  
+  return savedTicket
+}
+```
+
+### Email Forwarding
+
+```javascript
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  const { email } = payload
+  
+  // Forward to team
+  await inbound.emails.send({
+    from: 'forwarding@yourdomain.com',
+    to: 'team@yourdomain.com',
+    subject: `FWD: ${email.subject}`,
+    text: `
+Forwarded message from ${email.from?.text}:
+
+${email.text_body}
+    `.trim()
+  })
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Error Handling
+
+```javascript
+export async function POST(request: NextRequest) {
+  try {
+    const payload = await request.json()
+    
+    if (!isInboundWebhookPayload(payload)) {
+      console.error('Invalid webhook payload structure')
+      return NextResponse.json(
+        { error: 'Invalid webhook' },
+        { status: 400 }
+      )
+    }
+    
+    const { email } = payload
+    
+    // Validate required fields
+    if (!email.id || !email.from?.addresses?.[0]?.address) {
+      console.error('Missing required email fields')
+      return NextResponse.json(
+        { error: 'Incomplete email data' },
+        { status: 400 }
+      )
+    }
+    
+    await processEmail(email)
+    
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Webhook processing error:', error)
+    
+    // Return 200 to prevent retries for permanent errors
+    return NextResponse.json(
+      { success: false, error: 'Processing failed' },
+      { status: 200 }
+    )
+  }
+}
+```
+
+<Warning>
+  **Return 200 for processed webhooks** - Even if your processing fails, return a 200 status to prevent Inbound from retrying. Log errors to your monitoring system instead.
+</Warning>
+
+## Testing Webhooks Locally
+
+### Using ngrok
+
+<Steps>
+  <Step title="Install ngrok">
+    ```bash
+    brew install ngrok
+    # or download from ngrok.com
+    ```
+  </Step>
+  
+  <Step title="Start your local server">
+    ```bash
+    npm run dev
+    # Server running on http://localhost:3000
+    ```
+  </Step>
+  
+  <Step title="Create tunnel">
+    ```bash
+    ngrok http 3000
+    ```
+    
+    Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
+  </Step>
+  
+  <Step title="Update webhook URL">
+    ```javascript
+    await inbound.emailAddresses.update('addr_123', {
+      webhookUrl: 'https://abc123.ngrok.io/api/webhooks/inbound'
+    })
+    ```
+  </Step>
+  
+  <Step title="Send test email">
+    Send an email to your email address and watch the webhook arrive!
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Replying to Emails" icon="reply" href="/guides/replying-to-emails">
+    Reply to incoming emails with threading
+  </Card>
+  <Card title="Attachments" icon="paperclip" href="/guides/attachments">
+    Download and process email attachments
+  </Card>
+  <Card title="Webhook Security" icon="shield" href="/guides/webhook-verification">
+    Verify webhook signatures
+  </Card>
+  <Card title="Email Threads" icon="comments" href="/guides/email-threads">
+    View conversations and threads
+  </Card>
+</CardGroup>

@@ -1,0 +1,603 @@
+---
+title: 'TypeScript SDK'
+description: 'Complete reference for the Inbound TypeScript SDK'
+---
+
+## Installation
+
+```bash
+npm install inboundemail
+# or
+bun add inboundemail
+# or
+yarn add inboundemail
+```
+
+<Note>
+Current SDK version: **0.18.0**
+</Note>
+
+## Quick Start
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+// Initialize with your API key
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+// Send an email
+const email = await inbound.emails.send({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  html: '<p>Thanks for signing up!</p>'
+})
+```
+
+## Client Initialization
+
+### Basic Initialization
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(apiKey: string)
+```
+
+### Parameters
+
+<ParamField path="apiKey" type="string" required>
+  Your Inbound API key. Get yours at [inbound.new](https://inbound.new)
+</ParamField>
+
+## Available Resources
+
+The SDK provides access to the following resources:
+
+### Emails
+
+Send and manage outbound emails.
+
+```typescript
+await inbound.emails.send({ ... })
+```
+
+### Domains
+
+Manage your email domains and DNS configuration.
+
+```typescript
+await inbound.domains.create({ domain: 'yourdomain.com' })
+await inbound.domains.list()
+await inbound.domains.get(domainId)
+await inbound.domains.update(domainId, { ... })
+await inbound.domains.delete(domainId)
+```
+
+### Email Addresses
+
+Create and manage email addresses for receiving emails.
+
+```typescript
+await inbound.emailAddresses.create({ 
+  address: 'hello@yourdomain.com',
+  domainId: 'dom_123'
+})
+await inbound.emailAddresses.list()
+await inbound.emailAddresses.get(emailAddressId)
+await inbound.emailAddresses.update(emailAddressId, { ... })
+await inbound.emailAddresses.delete(emailAddressId)
+```
+
+### Endpoints
+
+Configure webhooks, email forwarding, and email groups.
+
+```typescript
+await inbound.endpoints.create({ 
+  name: 'My Webhook',
+  type: 'webhook',
+  config: { url: 'https://yourapp.com/webhook' }
+})
+await inbound.endpoints.list()
+await inbound.endpoints.get(endpointId)
+await inbound.endpoints.update(endpointId, { ... })
+await inbound.endpoints.delete(endpointId)
+await inbound.endpoints.test(endpointId)
+```
+
+## TypeScript Types
+
+### Email Types
+
+```typescript
+interface SendEmailRequest {
+  from: string
+  to: string | string[]
+  subject: string
+  html?: string
+  text?: string
+  cc?: string | string[]
+  bcc?: string | string[]
+  reply_to?: string | string[]
+  headers?: Record<string, string>
+  attachments?: Attachment[]
+  tags?: EmailTag[]
+  scheduled_at?: string
+  timezone?: string
+}
+
+interface Attachment {
+  filename: string
+  content: string // Base64 encoded
+  content_type?: string
+  path?: string
+}
+
+interface EmailTag {
+  name: string
+  value: string
+}
+
+interface EmailSendResponse {
+  id: string
+  message_id?: string
+  scheduled_at?: string
+  status?: 'sent' | 'scheduled'
+  timezone?: string
+}
+```
+
+### Domain Types
+
+```typescript
+interface CreateDomainRequest {
+  domain: string
+}
+
+interface Domain {
+  id: string
+  domain: string
+  status: 'pending' | 'verified' | 'failed'
+  canReceiveEmails: boolean
+  hasMxRecords: boolean
+  domainProvider: string | null
+  providerConfidence: string | null
+  mailFromDomain?: string
+  mailFromDomainStatus?: string
+  dnsRecords: DnsRecord[]
+  dnsConflict?: DnsConflict
+  createdAt: string
+  updatedAt: string
+  parentDomain?: string
+  message?: string
+}
+
+interface DnsRecord {
+  type: string
+  name: string
+  value: string
+  description?: string
+  isRequired: boolean
+}
+
+interface DnsConflict {
+  hasConflict: boolean
+  conflictType?: 'mx' | 'cname' | 'both'
+  message: string
+  existingRecords?: Array<{
+    type: string
+    value: string
+  }>
+}
+```
+
+### Email Address Types
+
+```typescript
+interface CreateEmailAddressRequest {
+  address: string
+  domainId: string
+  endpointId?: string
+  webhookId?: string
+  isActive?: boolean
+}
+
+interface EmailAddress {
+  id: string
+  address: string
+  domainId: string
+  webhookId: string | null
+  endpointId: string | null
+  isActive: boolean
+  isReceiptRuleConfigured: boolean
+  receiptRuleName: string | null
+  createdAt: string
+  updatedAt: string
+  userId: string
+  domain: {
+    id: string
+    name: string
+    status: string
+  }
+  routing: {
+    type: 'webhook' | 'endpoint' | 'none'
+    id: string | null
+    name: string | null
+    config?: any
+    isActive: boolean
+  }
+  warning?: string
+}
+```
+
+### Endpoint Types
+
+```typescript
+interface CreateEndpointRequest {
+  name: string
+  type: 'webhook' | 'email' | 'email_group'
+  config: WebhookConfig | EmailConfig | EmailGroupConfig
+  description?: string
+}
+
+interface WebhookConfig {
+  url: string
+  timeout?: number // 1-300 seconds
+  retryAttempts?: number // 0-10 attempts
+  headers?: Record<string, string>
+}
+
+interface EmailConfig {
+  forwardTo: string
+  preserveHeaders?: boolean
+}
+
+interface EmailGroupConfig {
+  emails: string[] // 1-50 emails
+  preserveHeaders?: boolean
+}
+
+interface Endpoint {
+  id: string
+  name: string
+  type: 'webhook' | 'email' | 'email_group'
+  config: WebhookConfig | EmailConfig | EmailGroupConfig
+  isActive: boolean
+  description: string | null
+  userId: string
+  createdAt: string
+  updatedAt: string
+  groupEmails: string[] | null
+  deliveryStats: {
+    total: number
+    successful: number
+    failed: number
+    lastDelivery: string | null
+  }
+}
+```
+
+### Webhook Payload Types
+
+```typescript
+interface InboundWebhookPayload {
+  event: 'email.received' | string
+  timestamp: string
+  email: {
+    id: string
+    messageId: string
+    from: InboundEmailAddress
+    to: InboundEmailAddress
+    recipient: string
+    subject: string
+    receivedAt: string
+    threadId?: string | null
+    threadPosition?: number | null
+    parsedData: InboundParsedEmailData
+    cleanedContent: InboundCleanedContent
+  }
+  endpoint: {
+    id: string
+    name: string
+    type: 'webhook' | 'email' | 'email_group'
+  }
+}
+
+interface InboundEmailAddress {
+  text: string
+  addresses: Array<{
+    name: string | null
+    address: string | null
+  }>
+}
+
+interface InboundParsedEmailData {
+  messageId: string
+  date: Date
+  subject: string
+  from: InboundEmailAddress
+  to: InboundEmailAddress
+  cc: InboundEmailAddress | null
+  bcc: InboundEmailAddress | null
+  replyTo: InboundEmailAddress | null
+  inReplyTo?: string
+  references?: string | string[]
+  textBody: string | null
+  htmlBody: string | null
+  raw: string
+  attachments: unknown[]
+  headers: Record<string, any>
+  priority?: string
+}
+
+interface InboundCleanedContent {
+  html: string | null
+  text: string | null
+  hasHtml: boolean
+  hasText: boolean
+  attachments: unknown[]
+  headers: Record<string, any>
+}
+```
+
+## Code Examples
+
+### Sending Emails
+
+<Tabs>
+  <Tab title="Basic Email">
+    ```typescript
+    const email = await inbound.emails.send({
+      from: 'hello@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Welcome to our service!',
+      html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>',
+      text: 'Welcome! Thanks for signing up.'
+    })
+
+    console.log(`Email sent: ${email.id}`)
+    ```
+  </Tab>
+  
+  <Tab title="With Attachments">
+    ```typescript
+    import { readFileSync } from 'fs'
+
+    const fileContent = readFileSync('./invoice.pdf')
+    const base64Content = fileContent.toString('base64')
+
+    const email = await inbound.emails.send({
+      from: 'billing@yourdomain.com',
+      to: 'customer@example.com',
+      subject: 'Your Invoice',
+      html: '<p>Please find your invoice attached.</p>',
+      attachments: [{
+        filename: 'invoice.pdf',
+        content: base64Content,
+        content_type: 'application/pdf'
+      }]
+    })
+    ```
+  </Tab>
+  
+  <Tab title="Scheduled Email">
+    ```typescript
+    // Schedule for a specific time
+    const email = await inbound.emails.send({
+      from: 'reminders@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Reminder: Meeting tomorrow',
+      html: '<p>Don\'t forget about our meeting!</p>',
+      scheduled_at: '2024-03-20T10:00:00Z'
+    })
+
+    // Natural language scheduling
+    const email2 = await inbound.emails.send({
+      from: 'reminders@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Follow-up',
+      html: '<p>Following up on our conversation</p>',
+      scheduled_at: 'tomorrow at 2pm',
+      timezone: 'America/New_York'
+    })
+    ```
+  </Tab>
+  
+  <Tab title="With Tags">
+    ```typescript
+    const email = await inbound.emails.send({
+      from: 'marketing@yourdomain.com',
+      to: 'subscriber@example.com',
+      subject: 'New Product Launch',
+      html: '<p>Check out our new product!</p>',
+      tags: [
+        { name: 'campaign', value: 'product-launch-2024' },
+        { name: 'category', value: 'marketing' }
+      ]
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### Managing Domains
+
+```typescript
+// Create a domain
+const domain = await inbound.domains.create({
+  domain: 'yourdomain.com'
+})
+
+console.log('Add these DNS records:')
+domain.dnsRecords.forEach(record => {
+  console.log(`${record.type}: ${record.name} -> ${record.value}`)
+})
+
+// List all domains
+const domains = await inbound.domains.list()
+
+// Get domain details
+const domainDetails = await inbound.domains.get(domain.id)
+console.log(`Status: ${domainDetails.status}`)
+
+// Delete a domain
+await inbound.domains.delete(domain.id)
+```
+
+### Creating Email Addresses
+
+```typescript
+// Create an email address with webhook routing
+const emailAddr = await inbound.emailAddresses.create({
+  address: 'support@yourdomain.com',
+  domainId: domain.id,
+  endpointId: endpoint.id,
+  isActive: true
+})
+
+console.log(`Created: ${emailAddr.address}`)
+console.log(`Routing to: ${emailAddr.routing.name}`)
+```
+
+### Configuring Endpoints
+
+<Tabs>
+  <Tab title="Webhook">
+    ```typescript
+    const webhook = await inbound.endpoints.create({
+      name: 'Support Webhook',
+      type: 'webhook',
+      config: {
+        url: 'https://yourapp.com/api/inbound-email',
+        timeout: 30,
+        retryAttempts: 3,
+        headers: {
+          'X-Custom-Header': 'value'
+        }
+      },
+      description: 'Webhook for support emails'
+    })
+
+    // Test the webhook
+    await inbound.endpoints.test(webhook.id)
+    ```
+  </Tab>
+  
+  <Tab title="Email Forwarding">
+    ```typescript
+    const forwarder = await inbound.endpoints.create({
+      name: 'Forward to Gmail',
+      type: 'email',
+      config: {
+        forwardTo: 'team@gmail.com',
+        preserveHeaders: true
+      }
+    })
+    ```
+  </Tab>
+  
+  <Tab title="Email Group">
+    ```typescript
+    const group = await inbound.endpoints.create({
+      name: 'Sales Team',
+      type: 'email_group',
+      config: {
+        emails: [
+          'sales1@company.com',
+          'sales2@company.com',
+          'sales3@company.com'
+        ],
+        preserveHeaders: true
+      }
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### Receiving & Replying to Emails
+
+```typescript
+import { 
+  Inbound, 
+  type InboundWebhookPayload, 
+  isInboundWebhookPayload 
+} from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  
+  // Verify this is a valid Inbound webhook
+  if (!isInboundWebhookPayload(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  const { email } = payload
+  console.log(`Received: ${email.subject} from ${email.from.addresses[0].address}`)
+  
+  // Auto-reply to support emails
+  if (email.subject?.toLowerCase().includes('support')) {
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      text: 'Thanks for contacting support! We\'ll get back to you within 24 hours.',
+      tags: [{ name: 'type', value: 'auto-reply' }]
+    })
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Idempotency
+
+```typescript
+// Use idempotency keys to safely retry requests
+const response = await fetch('https://api.inbound.new/api/e2/emails', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': 'order-123-confirmation'
+  },
+  body: JSON.stringify({
+    from: 'orders@yourdomain.com',
+    to: 'customer@example.com',
+    subject: 'Order Confirmation',
+    html: '<p>Your order has been confirmed!</p>'
+  })
+})
+
+// If you retry with the same key, you'll get the same response
+```
+
+<Note>
+Idempotency keys are useful for preventing duplicate emails when retrying failed requests.
+</Note>
+
+## API Reference
+
+For detailed API endpoint documentation, see:
+
+- [Send Email API](/api-reference/emails/send)
+- [Domains API](/api-reference/domains/create)
+- [Email Addresses API](/api-reference/email-addresses/create)
+- [Endpoints API](/api-reference/endpoints/create)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/sdk/authentication">
+    Learn about API key management and security
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/sdk/error-handling">
+    Handle errors and implement retry logic
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api-reference/webhooks">
+    Configure webhooks to receive emails
+  </Card>
+  <Card title="Examples" icon="code" href="/guides/sending-emails">
+    Explore more code examples
+  </Card>
+</CardGroup>

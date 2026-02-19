@@ -1,0 +1,510 @@
+---
+title: 'Webhook Verification'
+description: 'Secure your webhook endpoints and verify Inbound webhook signatures'
+---
+
+## Overview
+
+Secure your webhook endpoints to ensure incoming requests are genuinely from Inbound and haven't been tampered with.
+
+## Why Verify Webhooks?
+
+<Warning>
+  Without verification, anyone can send POST requests to your webhook URL, potentially:
+  - Injecting fake emails into your system
+  - Triggering unwanted actions
+  - Accessing sensitive endpoints
+  - Creating denial-of-service attacks
+</Warning>
+
+Webhook verification prevents these attacks by:
+- **Authenticating** the request origin
+- **Validating** request integrity
+- **Preventing** replay attacks
+
+## Verification Methods
+
+### 1. Type Guard Validation
+
+The simplest verification checks the payload structure:
+
+```typescript
+import { isInboundWebhookPayload, type InboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  
+  // Verify payload structure
+  if (!isInboundWebhookPayload(payload)) {
+    console.error('Invalid webhook payload structure')
+    return NextResponse.json(
+      { error: 'Invalid webhook' },
+      { status: 400 }
+    )
+  }
+  
+  // Payload is now typed as InboundWebhookPayload
+  const { email } = payload
+  
+  // Process email...
+  console.log('Valid webhook from:', email.from?.addresses?.[0]?.address)
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### 2. IP Allowlisting
+
+Restrict webhook requests to Inbound's IP addresses:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+
+const INBOUND_IPS = [
+  '54.240.0.0/18',     // AWS SES us-east-1
+  '54.240.64.0/19',
+  '52.46.0.0/18',      // AWS SES us-west-2  
+  // Add your Inbound-specific IPs
+]
+
+function isValidIP(ip: string): boolean {
+  // Implement IP range checking
+  // Use libraries like 'ip-range-check' or 'ipaddr.js'
+  return INBOUND_IPS.some(range => ipInRange(ip, range))
+}
+
+export async function POST(request: NextRequest) {
+  const clientIP = request.headers.get('x-forwarded-for') || 
+                   request.headers.get('x-real-ip') ||
+                   'unknown'
+  
+  if (!isValidIP(clientIP)) {
+    console.error('Webhook from unauthorized IP:', clientIP)
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 403 }
+    )
+  }
+  
+  const payload = await request.json()
+  // Process webhook...
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### 3. Secret Token Verification
+
+Use a shared secret to verify requests:
+
+<Steps>
+  <Step title="Set Webhook Secret">
+    When creating an email address, include a secret in the webhook URL:
+    
+    ```javascript
+    const emailAddress = await inbound.emailAddresses.create({
+      address: 'support@yourdomain.com',
+      webhookUrl: 'https://yourapp.com/webhooks/inbound?secret=your_secret_token_here'
+    })
+    ```
+    
+    Or use a custom header (if supported):
+    
+    ```javascript
+    webhookUrl: 'https://yourapp.com/webhooks/inbound',
+    webhookHeaders: {
+      'X-Webhook-Secret': 'your_secret_token_here'
+    }
+    ```
+  </Step>
+  
+  <Step title="Verify in Handler">
+    ```typescript
+    export async function POST(request: NextRequest) {
+      const secret = request.nextUrl.searchParams.get('secret')
+      // Or from header: request.headers.get('x-webhook-secret')
+      
+      const expectedSecret = process.env.WEBHOOK_SECRET
+      
+      if (secret !== expectedSecret) {
+        console.error('Invalid webhook secret')
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+      
+      // Process webhook...
+      return NextResponse.json({ success: true })
+    }
+    ```
+  </Step>
+  
+  <Step title="Generate Strong Secrets">
+    ```bash
+    # Generate a secure random secret
+    openssl rand -hex 32
+    # Output: a7f8d6e4c2b9a1f3e5d7c9b2a4f6e8d0c1b3a5f7e9d2c4b6a8f0e2d4c6b8a0f2
+    ```
+    
+    Store in environment variables:
+    ```bash
+    WEBHOOK_SECRET=a7f8d6e4c2b9a1f3e5d7c9b2a4f6e8d0c1b3a5f7e9d2c4b6a8f0e2d4c6b8a0f2
+    ```
+  </Step>
+</Steps>
+
+### 4. HMAC Signature Verification (Recommended)
+
+The most secure method uses cryptographic signatures:
+
+```typescript
+import { createHmac } from 'crypto'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  const body = await request.text()
+  const signature = request.headers.get('x-inbound-signature')
+  
+  if (!signature) {
+    return NextResponse.json(
+      { error: 'Missing signature' },
+      { status: 401 }
+    )
+  }
+  
+  // Verify signature
+  const expectedSignature = createHmac('sha256', process.env.WEBHOOK_SECRET!)
+    .update(body)
+    .digest('hex')
+  
+  if (signature !== expectedSignature) {
+    console.error('Invalid webhook signature')
+    return NextResponse.json(
+      { error: 'Invalid signature' },
+      { status: 401 }
+    )
+  }
+  
+  // Signature valid - safe to process
+  const payload = JSON.parse(body)
+  
+  // Process email...
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Complete Secure Handler
+
+Combining multiple verification methods:
+
+```typescript
+import { createHmac } from 'crypto'
+import { isInboundWebhookPayload, type InboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET!
+const MAX_TIMESTAMP_DIFF = 5 * 60 * 1000 // 5 minutes
+
+export async function POST(request: NextRequest) {
+  try {
+    // 1. Verify timestamp (prevent replay attacks)
+    const timestamp = request.headers.get('x-inbound-timestamp')
+    if (timestamp) {
+      const requestTime = parseInt(timestamp, 10)
+      const now = Date.now()
+      
+      if (Math.abs(now - requestTime) > MAX_TIMESTAMP_DIFF) {
+        console.error('Webhook timestamp too old or in future')
+        return NextResponse.json(
+          { error: 'Invalid timestamp' },
+          { status: 401 }
+        )
+      }
+    }
+    
+    // 2. Verify HMAC signature
+    const body = await request.text()
+    const signature = request.headers.get('x-inbound-signature')
+    
+    if (signature) {
+      const expectedSignature = createHmac('sha256', WEBHOOK_SECRET)
+        .update(body)
+        .digest('hex')
+      
+      if (signature !== expectedSignature) {
+        console.error('Invalid webhook signature')
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        )
+      }
+    }
+    
+    // 3. Verify payload structure
+    const payload = JSON.parse(body)
+    
+    if (!isInboundWebhookPayload(payload)) {
+      console.error('Invalid payload structure')
+      return NextResponse.json(
+        { error: 'Invalid payload' },
+        { status: 400 }
+      )
+    }
+    
+    // 4. All checks passed - process webhook
+    const { email } = payload
+    
+    console.log('✅ Verified webhook from:', email.from?.addresses?.[0]?.address)
+    
+    // Your email processing logic here
+    await processEmail(email)
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    console.error('Webhook processing error:', error)
+    return NextResponse.json(
+      { error: 'Processing failed' },
+      { status: 500 }
+    )
+  }
+}
+
+async function processEmail(email: any) {
+  // Your email processing logic
+}
+```
+
+## Testing Verification
+
+### Generate Test Signature
+
+```javascript
+import { createHmac } from 'crypto'
+
+const webhookSecret = 'your_secret_here'
+const payload = JSON.stringify({
+  type: 'email.received',
+  email: {
+    id: 'test_123',
+    subject: 'Test',
+    from: { addresses: [{ address: 'test@example.com' }] }
+  }
+})
+
+const signature = createHmac('sha256', webhookSecret)
+  .update(payload)
+  .digest('hex')
+
+console.log('Signature:', signature)
+
+// Use in test request
+fetch('http://localhost:3000/api/webhooks/inbound', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Inbound-Signature': signature,
+    'X-Inbound-Timestamp': Date.now().toString()
+  },
+  body: payload
+})
+```
+
+### Testing with curl
+
+```bash
+# Generate signature
+SECRET="your_secret_here"
+PAYLOAD='{"type":"email.received","email":{"id":"test"}}'
+SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+# Send request
+curl -X POST http://localhost:3000/api/webhooks/inbound \
+  -H "Content-Type: application/json" \
+  -H "X-Inbound-Signature: $SIGNATURE" \
+  -H "X-Inbound-Timestamp: $(date +%s)000" \
+  -d "$PAYLOAD"
+```
+
+## Rate Limiting
+
+Protect against abuse with rate limiting:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server'
+import { Redis } from '@upstash/redis'
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_URL!,
+  token: process.env.UPSTASH_REDIS_TOKEN!
+})
+
+const RATE_LIMIT = 100 // requests per minute
+const WINDOW = 60 // seconds
+
+export async function POST(request: NextRequest) {
+  const clientIP = request.headers.get('x-forwarded-for') || 'unknown'
+  const key = `webhook_rate_limit:${clientIP}`
+  
+  // Increment counter
+  const requests = await redis.incr(key)
+  
+  // Set expiry on first request
+  if (requests === 1) {
+    await redis.expire(key, WINDOW)
+  }
+  
+  // Check limit
+  if (requests > RATE_LIMIT) {
+    console.warn(`Rate limit exceeded for IP: ${clientIP}`)
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429 }
+    )
+  }
+  
+  // Process webhook...
+  const payload = await request.json()
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Logging and Monitoring
+
+```typescript
+export async function POST(request: NextRequest) {
+  const requestId = crypto.randomUUID()
+  const startTime = Date.now()
+  
+  console.log(`[${requestId}] Webhook received`, {
+    ip: request.headers.get('x-forwarded-for'),
+    userAgent: request.headers.get('user-agent'),
+    timestamp: new Date().toISOString()
+  })
+  
+  try {
+    const payload = await request.json()
+    
+    // Verify webhook...
+    
+    // Process email...
+    
+    const duration = Date.now() - startTime
+    console.log(`[${requestId}] Webhook processed successfully`, {
+      duration: `${duration}ms`,
+      emailId: payload.email?.id
+    })
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error) {
+    const duration = Date.now() - startTime
+    console.error(`[${requestId}] Webhook processing failed`, {
+      duration: `${duration}ms`,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
+    
+    // Alert monitoring system
+    await alertMonitoring({
+      requestId,
+      error,
+      endpoint: '/webhooks/inbound'
+    })
+    
+    return NextResponse.json(
+      { error: 'Processing failed' },
+      { status: 500 }
+    )
+  }
+}
+```
+
+## Best Practices
+
+1. **Use HTTPS only** - Never accept webhooks over HTTP
+2. **Verify every request** - Don't skip verification in development
+3. **Log security events** - Track failed verification attempts
+4. **Return 200 quickly** - Process emails asynchronously
+5. **Implement rate limiting** - Prevent abuse
+6. **Monitor failures** - Alert on repeated verification failures
+7. **Rotate secrets** - Change webhook secrets periodically
+8. **Use strong secrets** - Minimum 32 characters, random
+
+## Security Checklist
+
+<Accordion title="Webhook Security Checklist">
+  - [ ] HTTPS endpoint only
+  - [ ] Signature verification implemented
+  - [ ] Timestamp validation (prevent replay)
+  - [ ] Payload structure validation
+  - [ ] Rate limiting enabled
+  - [ ] Secrets stored in environment variables
+  - [ ] Failed attempts logged
+  - [ ] Monitoring/alerting configured
+  - [ ] IP allowlisting (optional)
+  - [ ] Request size limits enforced
+</Accordion>
+
+## Troubleshooting
+
+### Signature Mismatch
+
+```typescript
+// Debug signature verification
+const body = await request.text()
+const receivedSignature = request.headers.get('x-inbound-signature')
+const computedSignature = createHmac('sha256', WEBHOOK_SECRET)
+  .update(body)
+  .digest('hex')
+
+console.log('Received:', receivedSignature)
+console.log('Computed:', computedSignature)
+console.log('Body:', body.substring(0, 100))
+
+if (receivedSignature !== computedSignature) {
+  console.error('Signature mismatch!')
+  console.error('Check:')
+  console.error('1. WEBHOOK_SECRET is correct')
+  console.error('2. Body is not modified before verification')
+  console.error('3. Signature header name is correct')
+}
+```
+
+### Timestamp Issues
+
+```typescript
+const timestamp = request.headers.get('x-inbound-timestamp')
+const requestTime = parseInt(timestamp || '0', 10)
+const now = Date.now()
+const diff = Math.abs(now - requestTime)
+
+console.log('Request time:', new Date(requestTime).toISOString())
+console.log('Server time:', new Date(now).toISOString())
+console.log('Difference:', `${diff}ms`)
+
+if (diff > MAX_TIMESTAMP_DIFF) {
+  console.error('Timestamp too old or in future')
+  console.error('Check server clock synchronization')
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Receiving Emails" icon="inbox" href="/guides/receiving-emails">
+    Set up webhook handlers for inbound emails
+  </Card>
+  <Card title="Domain Setup" icon="globe" href="/guides/domain-setup">
+    Verify your domain for security
+  </Card>
+  <Card title="Email Addresses" icon="at" href="/api-reference/email-addresses">
+    Configure webhook URLs
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/webhooks">
+    Complete webhook documentation
+  </Card>
+</CardGroup>

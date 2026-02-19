@@ -1,0 +1,155 @@
+---
+title: 'Introduction to Inbound'
+description: 'Programmable email infrastructure that actually works the way you want it to'
+---
+
+# Email Infrastructure Made Simple
+
+Stop juggling email providers. Start building.
+
+Inbound gives you programmable email addresses that automatically process incoming messages and trigger webhooks in your app. Think of it as email infrastructure that actually works the way you'd want it to.
+
+<CardGroup cols={2}>
+  <Card title="Send & Receive Emails" icon="envelope" href="/quickstart">
+    Send transactional emails and receive webhooks for incoming messages with a simple API
+  </Card>
+  
+  <Card title="Webhook Processing" icon="webhook" href="/api-reference/introduction">
+    Automatically parse and route incoming emails to your webhook endpoints with full email content
+  </Card>
+  
+  <Card title="Domain Management" icon="globe" href="/api-reference/domains">
+    Add and verify your own domains with automated DNS configuration and monitoring
+  </Card>
+  
+  <Card title="Email Parsing" icon="file-code" href="/api-reference/emails">
+    Full HTML/text extraction, attachment handling, and spam filtering built-in
+  </Card>
+</CardGroup>
+
+## What is Inbound?
+
+Inbound is a modern email infrastructure platform that provides:
+
+- **REST API** with OpenAPI specification for easy integration
+- **Webhooks** with signature verification for real-time email processing
+- **Email parsing** with automatic HTML/text extraction
+- **Attachment handling** with S3 storage and download URLs
+- **Spam filtering** and comprehensive security checks
+- **Domain verification** and DNS management
+- **Usage tracking** and billing integration
+
+## Why Use Inbound?
+
+<AccordionGroup>
+  <Accordion title="Programmable Email Addresses">
+    Create unlimited email addresses that automatically trigger webhooks in your application. No manual forwarding or IMAP polling required.
+  </Accordion>
+  
+  <Accordion title="Production-Ready Infrastructure">
+    Built on AWS SES with automatic scaling, deliverability monitoring, and reputation management. Focus on your product, not email infrastructure.
+  </Accordion>
+  
+  <Accordion title="Developer-First Experience">
+    Simple SDK, comprehensive API documentation, and TypeScript support. Get from API key to working code in under 5 minutes.
+  </Accordion>
+  
+  <Accordion title="Complete Email Processing">
+    Automatic parsing, attachment handling, spam filtering, and thread management. Everything you need to handle emails in your app.
+  </Accordion>
+</AccordionGroup>
+
+## Quick Example
+
+Send an email and receive webhooks for replies:
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+// Send an email
+const email = await inbound.emails.send({
+  from: 'Inbound User <hello@yourdomain.com>',
+  to: 'user@example.com',
+  subject: 'Welcome!',
+  html: '<p>Thanks for signing up!</p>',
+  tags: [{ name: 'campaign', value: 'welcome' }]
+})
+
+console.log(`Email sent: ${email.id}`)
+```
+
+Receive and process incoming emails:
+
+```javascript
+import { NextRequest, NextResponse } from 'next/server'
+import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  
+  if (!isInboundWebhookPayload(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  const { email } = payload
+  console.log(`📧 Received: ${email.subject} from ${email.from?.addresses?.[0]?.address}`)
+  
+  // Auto-reply to support emails
+  if (email.subject?.toLowerCase().includes('support')) {
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      text: 'Thanks for contacting support! We\'ll get back to you within 24 hours.'
+    })
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Key Benefits
+
+<CardGroup cols={2}>
+  <Card title="No Infrastructure Management" icon="server">
+    Skip the complexity of managing email servers, DNS records, and deliverability. We handle it all.
+  </Card>
+  
+  <Card title="Instant Webhook Delivery" icon="bolt">
+    Receive parsed email content in your webhook endpoint within milliseconds of delivery.
+  </Card>
+  
+  <Card title="Built-in Security" icon="shield">
+    Automatic spam filtering, virus scanning, SPF/DKIM/DMARC verification on all incoming emails.
+  </Card>
+  
+  <Card title="Flexible Email Routing" icon="route">
+    Route different email addresses to different webhooks. Perfect for multi-tenant applications.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started with Inbound in under 5 minutes
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Explore the complete API documentation
+  </Card>
+  
+  <Card title="SDK Documentation" icon="book" href="/sdk/typescript">
+    Learn about the TypeScript SDK features
+  </Card>
+  
+  <Card title="Webhook Examples" icon="webhook" href="/guides/receiving-emails">
+    See real-world webhook processing examples
+  </Card>
+</CardGroup>
+
+<Note>
+  **Ready to get started?** Sign up at [inbound.new](https://inbound.new) and get your API key.
+</Note>

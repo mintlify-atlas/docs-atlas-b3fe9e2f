@@ -1,0 +1,772 @@
+---
+title: 'Error Handling'
+description: 'Handle errors gracefully and implement retry strategies'
+---
+
+## Overview
+
+Inbound API returns structured error responses with appropriate HTTP status codes. Understanding these errors and implementing proper error handling is crucial for building reliable integrations.
+
+## Error Response Structure
+
+All error responses follow a consistent structure:
+
+```typescript
+interface ErrorResponse {
+  error: string          // Human-readable error message
+  details?: string       // Additional error details (optional)
+  code?: string         // Machine-readable error code (optional)
+}
+```
+
+### Example Error Response
+
+```json
+{
+  "error": "Invalid email address format",
+  "details": "The email address 'invalid-email' does not match the required format"
+}
+```
+
+## HTTP Status Codes
+
+Inbound uses standard HTTP status codes to indicate the success or failure of requests:
+
+### 2xx Success
+
+| Code | Description | Usage |
+|------|-------------|-------|
+| 200 | OK | Successful GET, PATCH, DELETE requests |
+| 201 | Created | Successful POST request (resource created) |
+
+### 4xx Client Errors
+
+| Code | Description | Usage |
+|------|-------------|-------|
+| 400 | Bad Request | Invalid request parameters or validation errors |
+| 401 | Unauthorized | Missing or invalid API key |
+| 403 | Forbidden | Valid API key but insufficient permissions |
+| 404 | Not Found | Resource doesn't exist or not accessible |
+| 409 | Conflict | Resource already exists or conflict detected |
+| 429 | Too Many Requests | Rate limit exceeded |
+
+### 5xx Server Errors
+
+| Code | Description | Usage |
+|------|-------------|-------|
+| 500 | Internal Server Error | Unexpected server error |
+| 503 | Service Unavailable | Service temporarily unavailable |
+
+## Common Errors
+
+### 400 Bad Request
+
+Returned when request parameters are invalid or missing required fields.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "Missing required fields: from, to, and subject are required"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const email = await inbound.emails.send({
+        from: 'hello@yourdomain.com',
+        to: 'user@example.com',
+        subject: 'Welcome',
+        html: '<p>Welcome!</p>'
+      })
+    } catch (error) {
+      if (error.status === 400) {
+        console.error('Validation error:', error.body.error)
+        // Fix the request and retry
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Missing required fields (from, to, subject)
+- Invalid email address format
+- Invalid domain format
+- Email content too large
+- Invalid scheduled date format
+
+### 401 Unauthorized
+
+Returned when authentication fails.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "Unauthorized"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const domains = await inbound.domains.list()
+    } catch (error) {
+      if (error.status === 401) {
+        console.error('Authentication failed')
+        // Check API key is set correctly
+        console.error('API Key present:', !!process.env.INBOUND_API_KEY)
+        // Redirect to login or show auth error
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- API key missing from Authorization header
+- Invalid API key format
+- API key deleted or revoked
+- Missing "Bearer" prefix
+
+<Note>
+See the [Authentication guide](/sdk/authentication) for detailed troubleshooting.
+</Note>
+
+### 403 Forbidden
+
+Returned when you don't have permission to perform the action.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "You don't have permission to send from domain: example.com"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const email = await inbound.emails.send({
+        from: 'hello@example.com',
+        to: 'user@example.com',
+        subject: 'Test',
+        html: '<p>Test</p>'
+      })
+    } catch (error) {
+      if (error.status === 403) {
+        console.error('Permission denied:', error.body.error)
+        // Check domain ownership and verification status
+        const domains = await inbound.domains.list()
+        const domain = domains.find(d => d.domain === 'example.com')
+        console.log('Domain status:', domain?.status)
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Domain not verified
+- Domain belongs to another user
+- API key lacks required permissions
+- Domain limit reached
+
+### 404 Not Found
+
+Returned when the requested resource doesn't exist.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "Not found"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const domain = await inbound.domains.get('dom_nonexistent')
+    } catch (error) {
+      if (error.status === 404) {
+        console.error('Domain not found')
+        // Resource doesn't exist or you don't have access
+        // List available resources instead
+        const domains = await inbound.domains.list()
+        console.log('Available domains:', domains.map(d => d.id))
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Resource ID doesn't exist
+- Resource was deleted
+- Resource belongs to another user
+- Typo in resource ID
+
+### 409 Conflict
+
+Returned when a resource already exists or there's a conflict.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "You have already added this domain to your account"
+    }
+    ```
+    
+    Or:
+    
+    ```json
+    {
+      "error": "This domain is already registered on our platform. If you believe this is an error or you need to transfer ownership, please contact our support team.",
+      "code": "DOMAIN_ALREADY_REGISTERED"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const domain = await inbound.domains.create({
+        domain: 'example.com'
+      })
+    } catch (error) {
+      if (error.status === 409) {
+        console.error('Conflict:', error.body.error)
+        
+        if (error.body.code === 'DOMAIN_ALREADY_REGISTERED') {
+          // Domain registered by another user
+          console.log('Contact support for domain transfer')
+        } else {
+          // You already own this domain
+          const domains = await inbound.domains.list()
+          const existing = domains.find(d => d.domain === 'example.com')
+          console.log('Using existing domain:', existing.id)
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Domain already added to your account
+- Domain registered by another user
+- Email address already exists
+- Duplicate resource creation
+
+### 429 Too Many Requests
+
+Returned when rate limits are exceeded.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "Rate limit exceeded"
+    }
+    ```
+    
+    Or:
+    
+    ```json
+    {
+      "error": "Email sending limit reached. Please upgrade your plan to send more emails."
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    async function sendEmailWithRetry(emailData: any, maxRetries = 3) {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          return await inbound.emails.send(emailData)
+        } catch (error) {
+          if (error.status === 429) {
+            const retryAfter = error.headers?.get('Retry-After') || 60
+            console.log(`Rate limited. Waiting ${retryAfter}s before retry ${attempt}/${maxRetries}`)
+            
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, retryAfter * 1000))
+            } else {
+              throw new Error('Rate limit exceeded after max retries')
+            }
+          } else {
+            throw error
+          }
+        }
+      }
+    }
+    
+    // Usage
+    const email = await sendEmailWithRetry({
+      from: 'hello@yourdomain.com',
+      to: 'user@example.com',
+      subject: 'Welcome',
+      html: '<p>Welcome!</p>'
+    })
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Too many requests per second
+- Monthly email limit reached
+- Plan limits exceeded
+
+<Note>
+Check the `Retry-After` header to know when to retry.
+</Note>
+
+### 500 Internal Server Error
+
+Returned when an unexpected server error occurs.
+
+<Tabs>
+  <Tab title="Error Response">
+    ```json
+    {
+      "error": "Failed to send email. Please try again later."
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Handling">
+    ```typescript
+    try {
+      const email = await inbound.emails.send({ /* ... */ })
+    } catch (error) {
+      if (error.status === 500) {
+        console.error('Server error:', error.body.error)
+        // Log error for monitoring
+        console.error('Request ID:', error.headers?.get('X-Request-ID'))
+        // Retry with exponential backoff
+        await retryWithBackoff(() => inbound.emails.send({ /* ... */ }))
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**Common causes:**
+- Temporary service disruption
+- Database connection issues
+- External service failure (AWS SES, etc.)
+
+## Try/Catch Patterns
+
+### Basic Error Handling
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+try {
+  const email = await inbound.emails.send({
+    from: 'hello@yourdomain.com',
+    to: 'user@example.com',
+    subject: 'Welcome',
+    html: '<p>Welcome to our service!</p>'
+  })
+  
+  console.log(`✅ Email sent: ${email.id}`)
+} catch (error) {
+  console.error('❌ Failed to send email:', error.message)
+  
+  // Log full error for debugging
+  console.error('Status:', error.status)
+  console.error('Body:', error.body)
+}
+```
+
+### Comprehensive Error Handling
+
+```typescript
+async function sendEmail(emailData: any) {
+  try {
+    const email = await inbound.emails.send(emailData)
+    return { success: true, data: email }
+  } catch (error) {
+    // Handle specific error types
+    switch (error.status) {
+      case 400:
+        return { 
+          success: false, 
+          error: 'VALIDATION_ERROR',
+          message: 'Invalid email data: ' + error.body.error 
+        }
+      
+      case 401:
+        return { 
+          success: false, 
+          error: 'AUTH_ERROR',
+          message: 'Authentication failed. Check your API key.' 
+        }
+      
+      case 403:
+        return { 
+          success: false, 
+          error: 'PERMISSION_ERROR',
+          message: 'Permission denied: ' + error.body.error 
+        }
+      
+      case 429:
+        return { 
+          success: false, 
+          error: 'RATE_LIMIT',
+          message: 'Rate limit exceeded. Please try again later.',
+          retryAfter: error.headers?.get('Retry-After')
+        }
+      
+      case 500:
+        return { 
+          success: false, 
+          error: 'SERVER_ERROR',
+          message: 'Server error. Please try again later.' 
+        }
+      
+      default:
+        return { 
+          success: false, 
+          error: 'UNKNOWN_ERROR',
+          message: error.message 
+        }
+    }
+  }
+}
+
+// Usage
+const result = await sendEmail({
+  from: 'hello@yourdomain.com',
+  to: 'user@example.com',
+  subject: 'Welcome',
+  html: '<p>Welcome!</p>'
+})
+
+if (result.success) {
+  console.log('Email sent:', result.data.id)
+} else {
+  console.error('Failed:', result.error, result.message)
+}
+```
+
+### Typed Error Handling
+
+```typescript
+interface InboundError extends Error {
+  status: number
+  body: {
+    error: string
+    details?: string
+    code?: string
+  }
+  headers?: Headers
+}
+
+function isInboundError(error: unknown): error is InboundError {
+  return (
+    error instanceof Error &&
+    'status' in error &&
+    'body' in error
+  )
+}
+
+try {
+  const email = await inbound.emails.send({ /* ... */ })
+} catch (error) {
+  if (isInboundError(error)) {
+    // TypeScript knows about error.status, error.body, etc.
+    console.error(`Error ${error.status}: ${error.body.error}`)
+  } else {
+    // Unknown error type
+    console.error('Unexpected error:', error)
+  }
+}
+```
+
+## Retry Strategies
+
+### Exponential Backoff
+
+```typescript
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries - 1
+      const isRetryable = error.status >= 500 || error.status === 429
+      
+      if (!isRetryable || isLastAttempt) {
+        throw error
+      }
+      
+      // Exponential backoff: 1s, 2s, 4s, 8s, ...
+      const delay = baseDelay * Math.pow(2, attempt)
+      const jitter = Math.random() * 1000 // Add jitter to prevent thundering herd
+      
+      console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms`)
+      await new Promise(resolve => setTimeout(resolve, delay + jitter))
+    }
+  }
+  
+  throw new Error('Max retries exceeded')
+}
+
+// Usage
+const email = await retryWithBackoff(() =>
+  inbound.emails.send({
+    from: 'hello@yourdomain.com',
+    to: 'user@example.com',
+    subject: 'Welcome',
+    html: '<p>Welcome!</p>'
+  })
+)
+```
+
+### Retry Specific Errors
+
+```typescript
+const RETRYABLE_ERRORS = [429, 500, 503]
+
+async function retryRequest<T>(
+  fn: () => Promise<T>,
+  options = { maxRetries: 3, delay: 1000 }
+): Promise<T> {
+  for (let attempt = 0; attempt < options.maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (isInboundError(error)) {
+        const shouldRetry = RETRYABLE_ERRORS.includes(error.status)
+        const isLastAttempt = attempt === options.maxRetries - 1
+        
+        if (!shouldRetry || isLastAttempt) {
+          throw error
+        }
+        
+        // Use Retry-After header if available
+        const retryAfter = error.headers?.get('Retry-After')
+        const delay = retryAfter 
+          ? parseInt(retryAfter) * 1000 
+          : options.delay * Math.pow(2, attempt)
+        
+        console.log(`Retrying in ${delay}ms (attempt ${attempt + 1})...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      } else {
+        throw error
+      }
+    }
+  }
+  
+  throw new Error('Max retries exceeded')
+}
+```
+
+### Circuit Breaker Pattern
+
+```typescript
+class CircuitBreaker {
+  private failures = 0
+  private lastFailureTime = 0
+  private state: 'closed' | 'open' | 'half-open' = 'closed'
+  
+  constructor(
+    private threshold = 5,
+    private timeout = 60000
+  ) {}
+  
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'open') {
+      const now = Date.now()
+      if (now - this.lastFailureTime > this.timeout) {
+        this.state = 'half-open'
+      } else {
+        throw new Error('Circuit breaker is open')
+      }
+    }
+    
+    try {
+      const result = await fn()
+      this.onSuccess()
+      return result
+    } catch (error) {
+      this.onFailure()
+      throw error
+    }
+  }
+  
+  private onSuccess() {
+    this.failures = 0
+    this.state = 'closed'
+  }
+  
+  private onFailure() {
+    this.failures++
+    this.lastFailureTime = Date.now()
+    
+    if (this.failures >= this.threshold) {
+      this.state = 'open'
+      console.log('Circuit breaker opened')
+    }
+  }
+}
+
+// Usage
+const breaker = new CircuitBreaker(5, 60000)
+
+try {
+  const email = await breaker.execute(() =>
+    inbound.emails.send({ /* ... */ })
+  )
+} catch (error) {
+  console.error('Request failed:', error.message)
+}
+```
+
+## Error Monitoring
+
+### Logging Errors
+
+```typescript
+import * as Sentry from '@sentry/node'
+
+try {
+  const email = await inbound.emails.send({ /* ... */ })
+} catch (error) {
+  if (isInboundError(error)) {
+    // Log to monitoring service
+    Sentry.captureException(error, {
+      tags: {
+        service: 'inbound',
+        status: error.status,
+        endpoint: 'emails.send'
+      },
+      extra: {
+        errorBody: error.body,
+        requestData: { /* sanitized request data */ }
+      }
+    })
+  }
+  
+  throw error
+}
+```
+
+### Structured Logging
+
+```typescript
+import { logger } from './logger'
+
+try {
+  const email = await inbound.emails.send({ /* ... */ })
+  
+  logger.info('Email sent successfully', {
+    emailId: email.id,
+    messageId: email.message_id,
+    from: emailData.from,
+    to: emailData.to
+  })
+} catch (error) {
+  if (isInboundError(error)) {
+    logger.error('Failed to send email', {
+      status: error.status,
+      error: error.body.error,
+      details: error.body.details,
+      code: error.body.code,
+      requestData: emailData
+    })
+  }
+}
+```
+
+## Real Error Examples
+
+From the source code, here are actual error scenarios:
+
+### Invalid Email Format
+
+```typescript
+// Source: app/api/e2/emails/send.ts:320-330
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+for (const email of allRecipients) {
+  const address = extractEmailAddress(email)
+  if (!emailRegex.test(address)) {
+    // Returns 400
+    throw new Error(`Invalid email format: ${email}`)
+  }
+}
+```
+
+### Domain Ownership
+
+```typescript
+// Source: app/api/e2/emails/send.ts:301-308
+if (userDomain.length === 0) {
+  // Returns 403
+  throw new Error(`You don't have permission to send from domain: ${fromDomain}`)
+}
+```
+
+### Rate Limit Exceeded
+
+```typescript
+// Source: app/api/e2/emails/send.ts:381-388
+if (!emailCheck.allowed) {
+  // Returns 429
+  throw new Error('Email sending limit reached. Please upgrade your plan to send more emails.')
+}
+```
+
+### Resource Conflict
+
+```typescript
+// Source: app/api/e2/domains/create.ts:128-142
+if (existingDomainAnyUser[0]) {
+  if (isOwnDomain) {
+    // Returns 409
+    throw new Error('You have already added this domain to your account')
+  } else {
+    // Returns 409 with code
+    throw new Error(
+      'This domain is already registered on our platform. If you believe this is an error or you need to transfer ownership, please contact our support team.',
+      { code: 'DOMAIN_ALREADY_REGISTERED' }
+    )
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TypeScript SDK" icon="code" href="/sdk/typescript">
+    Explore the full SDK reference
+  </Card>
+  <Card title="Authentication" icon="key" href="/sdk/authentication">
+    Secure your API requests
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api-reference/webhooks">
+    Configure webhooks for receiving emails
+  </Card>
+  <Card title="Rate Limits" icon="gauge" href="/api-reference/rate-limits">
+    Understand rate limits and quotas
+  </Card>
+</CardGroup>

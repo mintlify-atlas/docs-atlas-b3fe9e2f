@@ -1,33 +1,151 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "Introduction"
+description: "Overview of the Inbound Email API"
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Welcome to Inbound API
 
-## Welcome
+Inbound provides a REST API for managing email infrastructure programmatically. Send and receive emails, manage domains, configure email addresses, and trigger webhooks with a simple, modern API.
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+## Base URL
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+All API requests should be made to:
 
-## Authentication
+```
+https://inbound.new/api/e2/
+```
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+## REST API Principles
+
+The Inbound API follows REST conventions:
+
+- **Resource-oriented URLs**: Each endpoint represents a specific resource (domains, emails, email-addresses, endpoints)
+- **HTTP methods**: Standard methods indicate the action:
+  - `GET` - Retrieve resources
+  - `POST` - Create new resources
+  - `PATCH` - Update existing resources
+  - `DELETE` - Remove resources
+- **JSON everywhere**: All requests and responses use JSON format
+- **Standard HTTP status codes**: Success and error responses use conventional HTTP codes
+
+## Request Format
+
+All requests must include:
+
+```http
+Content-Type: application/json
+Authorization: Bearer YOUR_API_KEY
+```
+
+Request body example:
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+{
+  "domain": "yourdomain.com"
+}
 ```
+
+## Response Format
+
+All responses are returned in JSON format with appropriate HTTP status codes.
+
+### Success Response (200/201)
+
+```json
+{
+  "id": "dom_abc123",
+  "domain": "yourdomain.com",
+  "status": "pending",
+  "createdAt": "2024-01-15T10:30:00Z"
+}
+```
+
+### List Response with Pagination
+
+```json
+{
+  "data": [
+    {
+      "id": "dom_abc123",
+      "domain": "yourdomain.com"
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 150,
+    "hasMore": true
+  }
+}
+```
+
+### Error Response (4xx/5xx)
+
+```json
+{
+  "error": "Domain is required",
+  "code": "VALIDATION_ERROR"
+}
+```
+
+## API Versioning
+
+The current API version is **E2** (version 2). The version is included in the URL path:
+
+```
+https://inbound.new/api/e2/domains
+```
+
+When breaking changes are introduced, a new version will be released. The previous version will continue to be supported for a deprecation period.
+
+## API Structure
+
+The E2 API is organized into logical resource groups:
+
+### Core Resources
+
+- **`/domains`** - Manage email domains and DNS verification
+- **`/email-addresses`** - Create and configure email addresses
+- **`/emails`** - Send, receive, and manage emails
+- **`/endpoints`** - Configure webhooks and forwarding rules
+
+### Additional Resources
+
+- **`/guard`** - Spam filtering and security rules
+- **`/mail/threads`** - Email thread/conversation management
+- **`/attachments`** - Access email attachments
+
+## Getting Started
+
+1. **Get your API key** from the [Inbound dashboard](https://inbound.new)
+2. **Add a domain** to verify ownership
+3. **Create an email address** with a webhook endpoint
+4. **Start receiving emails** at your webhook URL
+
+## SDKs
+
+Official SDK for Node.js/TypeScript:
+
+```bash
+npm install inboundemail
+```
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+const domain = await inbound.domains.create({
+  domain: 'yourdomain.com'
+})
+```
+
+## Rate Limits
+
+All API endpoints are rate limited to ensure fair usage. See [Rate Limits](/api-reference/rate-limits) for details.
+
+## Need Help?
+
+- **Documentation**: [inbound.new/docs](https://inbound.new/docs)
+- **API Reference**: Detailed endpoint documentation in this section
+- **Support**: Contact support through the dashboard

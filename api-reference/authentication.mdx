@@ -1,0 +1,222 @@
+---
+title: "Authentication"
+description: "How to authenticate with the Inbound API"
+---
+
+## Overview
+
+The Inbound API uses **Bearer token authentication** with API keys. All API requests must include a valid API key in the `Authorization` header.
+
+## API Key Management
+
+### Getting Your API Key
+
+1. Log in to your [Inbound dashboard](https://inbound.new)
+2. Navigate to Settings > API Keys
+3. Generate a new API key
+4. Store it securely - it won't be shown again
+
+### API Key Format
+
+API keys are prefixed for identification:
+
+```
+inbnd_sk_abc123def456ghi789jkl...
+```
+
+## Authentication Methods
+
+The API supports two authentication methods:
+
+### 1. API Key (Recommended)
+
+Include your API key in the `Authorization` header with the `Bearer` scheme:
+
+```http
+GET /api/e2/domains HTTP/1.1
+Host: inbound.new
+Authorization: Bearer inbnd_sk_abc123def456ghi789jkl
+Content-Type: application/json
+```
+
+### 2. Session Cookie
+
+When making requests from the browser dashboard, session-based authentication is used automatically. This is not recommended for API integrations.
+
+## Making Authenticated Requests
+
+### Using cURL
+
+```bash
+curl https://inbound.new/api/e2/domains \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+### Using JavaScript/TypeScript
+
+```typescript
+const response = await fetch('https://inbound.new/api/e2/domains', {
+  headers: {
+    'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,
+    'Content-Type': 'application/json'
+  }
+})
+
+const data = await response.json()
+```
+
+### Using the SDK
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+// Authentication is handled automatically
+const domains = await inbound.domains.list()
+```
+
+## Authentication Errors
+
+### 401 Unauthorized
+
+Returned when authentication is missing or invalid.
+
+**Missing Authorization Header:**
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Authentication required. Provide a valid session cookie or Bearer token.",
+  "statusCode": 401
+}
+```
+
+**Response Headers:**
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="API", charset="UTF-8"
+Content-Type: application/json; charset=utf-8
+```
+
+**Invalid API Key:**
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Authentication required. Provide a valid session cookie or Bearer token.",
+  "statusCode": 401
+}
+```
+
+### 503 Service Unavailable
+
+Returned when the rate limiting service is temporarily unavailable:
+
+```json
+{
+  "error": "Service Unavailable",
+  "message": "Rate limiting service is temporarily unavailable. Please try again later.",
+  "statusCode": 503
+}
+```
+
+**Response Headers:**
+
+```http
+HTTP/1.1 503 Service Unavailable
+Retry-After: 60
+Content-Type: application/json; charset=utf-8
+```
+
+## Security Best Practices
+
+<Warning>
+  **Never expose your API keys** in client-side code, public repositories, or logs.
+</Warning>
+
+### Store Keys Securely
+
+- Use environment variables for API keys
+- Never commit keys to version control
+- Rotate keys periodically
+- Use separate keys for different environments
+
+### Environment Variables
+
+```bash
+# .env (never commit this file)
+INBOUND_API_KEY=inbnd_sk_abc123def456ghi789jkl
+```
+
+```typescript
+// Use in your application
+const apiKey = process.env.INBOUND_API_KEY
+
+if (!apiKey) {
+  throw new Error('INBOUND_API_KEY is not configured')
+}
+```
+
+### Key Rotation
+
+1. Generate a new API key in the dashboard
+2. Update your application with the new key
+3. Test that everything works
+4. Delete the old API key
+
+### Limiting Key Access
+
+- Create separate API keys for different applications or environments
+- Use different keys for development, staging, and production
+- Delete unused keys immediately
+
+## Authentication Flow
+
+When you make an authenticated request:
+
+1. **API receives request** with `Authorization: Bearer <token>`
+2. **Token validation** - checks if API key is valid and active
+3. **User identification** - retrieves `userId` associated with the key
+4. **Rate limit check** - verifies user hasn't exceeded limits
+5. **Request processed** - if all checks pass
+
+## Testing Authentication
+
+Test your API key with a simple request:
+
+```bash
+curl https://inbound.new/api/e2/domains \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+```
+
+Successful response:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 0,
+    "hasMore": false
+  }
+}
+```
+
+## Multi-tenant Isolation
+
+All API requests are automatically scoped to your user account. You can only access resources that belong to your account.
+
+```typescript
+// All queries are automatically scoped by userId
+const domains = await db
+  .select()
+  .from(emailDomains)
+  .where(eq(emailDomains.userId, userId)) // Automatic isolation
+```
+
+This ensures complete data isolation between accounts.

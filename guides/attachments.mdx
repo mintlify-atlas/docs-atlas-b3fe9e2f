@@ -1,0 +1,603 @@
+---
+title: 'Attachments'
+description: 'Handle email attachments - sending, receiving, and downloading files'
+---
+
+## Overview
+
+Inbound makes it easy to work with email attachments. This guide covers sending attachments, receiving them via webhooks, and downloading attachment files.
+
+## Sending Attachments
+
+### Basic Attachment
+
+```javascript
+import { Inbound } from 'inboundemail'
+import { readFileSync } from 'fs'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+// Read file and encode to base64
+const pdfContent = readFileSync('./invoice.pdf').toString('base64')
+
+const email = await inbound.emails.send({
+  from: 'invoices@yourdomain.com',
+  to: 'customer@example.com',
+  subject: 'Invoice #12345',
+  html: '<p>Please find your invoice attached.</p>',
+  attachments: [
+    {
+      filename: 'invoice-12345.pdf',
+      content: pdfContent,
+      content_type: 'application/pdf'
+    }
+  ]
+})
+```
+
+### Multiple Attachments
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'reports@yourdomain.com',
+  to: 'manager@example.com',
+  subject: 'Monthly Report',
+  html: '<p>Monthly report with charts attached.</p>',
+  attachments: [
+    {
+      filename: 'report.pdf',
+      content: pdfBase64,
+      content_type: 'application/pdf'
+    },
+    {
+      filename: 'chart.png',
+      content: imageBase64,
+      content_type: 'image/png'
+    },
+    {
+      filename: 'data.csv',
+      content: csvBase64,
+      content_type: 'text/csv'
+    }
+  ]
+})
+```
+
+### Inline Images
+
+Embed images directly in HTML:
+
+```javascript
+const email = await inbound.emails.send({
+  from: 'newsletter@yourdomain.com',
+  to: 'subscriber@example.com',
+  subject: 'Weekly Newsletter',
+  html: `
+    <div>
+      <h1>This Week's Featured Product</h1>
+      <img src="cid:product-image" alt="Product" />
+      <p>Check out our amazing new product!</p>
+    </div>
+  `,
+  attachments: [
+    {
+      filename: 'product.jpg',
+      content: imageBase64,
+      content_type: 'image/jpeg',
+      content_id: 'product-image' // Reference in HTML with cid:product-image
+    }
+  ]
+})
+```
+
+## Common Content Types
+
+```javascript
+const contentTypes = {
+  // Documents
+  'pdf': 'application/pdf',
+  'doc': 'application/msword',
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'xls': 'application/vnd.ms-excel',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'ppt': 'application/vnd.ms-powerpoint',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  
+  // Images
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'png': 'image/png',
+  'gif': 'image/gif',
+  'svg': 'image/svg+xml',
+  'webp': 'image/webp',
+  
+  // Text/Data
+  'txt': 'text/plain',
+  'csv': 'text/csv',
+  'json': 'application/json',
+  'xml': 'application/xml',
+  
+  // Archives
+  'zip': 'application/zip',
+  'tar': 'application/x-tar',
+  'gz': 'application/gzip',
+  
+  // Other
+  'mp4': 'video/mp4',
+  'mp3': 'audio/mpeg',
+  'ics': 'text/calendar'
+}
+```
+
+## Receiving Attachments
+
+### Webhook Payload
+
+When an email with attachments arrives, the webhook payload includes attachment metadata:
+
+```json
+{
+  "type": "email.received",
+  "email": {
+    "id": "email_abc123",
+    "subject": "Document submission",
+    "from": { "addresses": [{ "address": "sender@example.com" }] },
+    "attachments": [
+      {
+        "filename": "resume.pdf",
+        "content_type": "application/pdf",
+        "size": 245678,
+        "content_id": null
+      },
+      {
+        "filename": "cover-letter.docx",
+        "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "size": 89234,
+        "content_id": null
+      }
+    ]
+  }
+}
+```
+
+### Processing Attachments in Webhook
+
+```typescript
+import { type InboundWebhookPayload, isInboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  
+  if (!isInboundWebhookPayload(payload)) {
+    return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+  }
+  
+  const { email } = payload
+  
+  // Check for attachments
+  if (email.attachments && email.attachments.length > 0) {
+    console.log(`📎 Email has ${email.attachments.length} attachment(s)`)
+    
+    for (const attachment of email.attachments) {
+      console.log('Processing attachment:', {
+        filename: attachment.filename,
+        type: attachment.content_type,
+        size: `${(attachment.size / 1024).toFixed(2)} KB`
+      })
+      
+      // Download attachment
+      await downloadAndProcessAttachment(email.id, attachment.filename)
+    }
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+## Downloading Attachments
+
+Download attachment files using the Inbound API:
+
+### Using the SDK
+
+```javascript
+import { Inbound } from 'inboundemail'
+import { writeFileSync } from 'fs'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+async function downloadAttachment(emailId: string, filename: string) {
+  try {
+    // Get attachment as buffer
+    const buffer = await inbound.attachments.download(emailId, filename)
+    
+    // Save to disk
+    writeFileSync(`./downloads/${filename}`, buffer)
+    
+    console.log(`Downloaded: ${filename}`)
+  } catch (error) {
+    console.error('Download failed:', error)
+  }
+}
+
+// Usage
+await downloadAttachment('email_abc123', 'resume.pdf')
+```
+
+### Using Fetch API
+
+```javascript
+async function downloadAttachment(emailId: string, filename: string) {
+  const url = `https://inbound.new/api/e2/attachments/${emailId}/${encodeURIComponent(filename)}`
+  
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`
+    }
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`)
+  }
+  
+  const buffer = await response.arrayBuffer()
+  return Buffer.from(buffer)
+}
+```
+
+### Upload to Cloud Storage
+
+#### AWS S3
+
+```javascript
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { Inbound } from 'inboundemail'
+
+const s3 = new S3Client({ region: 'us-east-1' })
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+async function uploadAttachmentToS3(
+  emailId: string,
+  filename: string,
+  contentType: string
+) {
+  // Download from Inbound
+  const buffer = await inbound.attachments.download(emailId, filename)
+  
+  // Upload to S3
+  const key = `attachments/${emailId}/${filename}`
+  
+  await s3.send(new PutObjectCommand({
+    Bucket: 'my-bucket',
+    Key: key,
+    Body: buffer,
+    ContentType: contentType
+  }))
+  
+  const url = `https://my-bucket.s3.amazonaws.com/${key}`
+  console.log(`Uploaded to S3: ${url}`)
+  
+  return url
+}
+```
+
+#### Cloudinary
+
+```javascript
+import { v2 as cloudinary } from 'cloudinary'
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+})
+
+async function uploadToCloudinary(emailId: string, filename: string) {
+  // Download attachment
+  const buffer = await inbound.attachments.download(emailId, filename)
+  const base64 = buffer.toString('base64')
+  
+  // Upload to Cloudinary
+  const result = await cloudinary.uploader.upload(
+    `data:application/octet-stream;base64,${base64}`,
+    {
+      public_id: `email-attachments/${emailId}/${filename}`,
+      resource_type: 'auto'
+    }
+  )
+  
+  console.log('Uploaded to Cloudinary:', result.secure_url)
+  return result.secure_url
+}
+```
+
+## Attachment Size Limits
+
+<Warning>
+  **Maximum attachment size: 10 MB per file**
+  
+  Total size for all attachments in a single email: 25 MB
+</Warning>
+
+Handle oversized attachments:
+
+```javascript
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024 // 10 MB
+
+async function sendEmailWithLargeFiles(files: Array<{ path: string, name: string }>) {
+  const attachments = []
+  const skippedFiles = []
+  
+  for (const file of files) {
+    const stats = statSync(file.path)
+    
+    if (stats.size > MAX_ATTACHMENT_SIZE) {
+      // Upload to cloud storage instead
+      const url = await uploadToS3(file.path, file.name)
+      skippedFiles.push({ name: file.name, url })
+    } else {
+      // Include as attachment
+      const content = readFileSync(file.path).toString('base64')
+      attachments.push({
+        filename: file.name,
+        content,
+        content_type: getMimeType(file.name)
+      })
+    }
+  }
+  
+  // Build email with links to large files
+  let html = '<p>Files attached to this email:</p><ul>'
+  
+  attachments.forEach(att => {
+    html += `<li>${att.filename} (attached)</li>`
+  })
+  
+  skippedFiles.forEach(file => {
+    html += `<li><a href="${file.url}">${file.name}</a> (too large, download link)</li>`
+  })
+  
+  html += '</ul>'
+  
+  await inbound.emails.send({
+    from: 'files@yourdomain.com',
+    to: 'recipient@example.com',
+    subject: 'Files Ready',
+    html,
+    attachments
+  })
+}
+```
+
+## Security Best Practices
+
+### Validate File Types
+
+```javascript
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]
+
+function validateAttachment(attachment: any) {
+  // Check content type
+  if (!ALLOWED_TYPES.includes(attachment.content_type)) {
+    throw new Error(`File type not allowed: ${attachment.content_type}`)
+  }
+  
+  // Check file extension
+  const ext = attachment.filename.split('.').pop()?.toLowerCase()
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
+  
+  if (!ext || !allowedExtensions.includes(ext)) {
+    throw new Error(`File extension not allowed: ${ext}`)
+  }
+  
+  // Check size
+  const maxSize = 5 * 1024 * 1024 // 5 MB
+  if (attachment.size > maxSize) {
+    throw new Error(`File too large: ${attachment.size} bytes`)
+  }
+}
+```
+
+### Scan for Viruses
+
+```javascript
+import { ClamScan } from 'clamscan'
+
+const clamscan = await new ClamScan().init({
+  clamdscan: {
+    socket: '/var/run/clamav/clamd.sock',
+    timeout: 60000
+  }
+})
+
+async function scanAttachment(buffer: Buffer) {
+  const { isInfected, viruses } = await clamscan.scanBuffer(buffer)
+  
+  if (isInfected) {
+    console.error('Virus detected:', viruses)
+    throw new Error(`Virus detected: ${viruses.join(', ')}`)
+  }
+  
+  console.log('File is clean')
+}
+```
+
+### Sanitize Filenames
+
+```javascript
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-z0-9._-]/gi, '_')  // Remove special chars
+    .replace(/_{2,}/g, '_')           // Remove multiple underscores
+    .substring(0, 255)                // Limit length
+}
+
+// Usage
+const safeFilename = sanitizeFilename('../../etc/passwd')  // "etc_passwd"
+```
+
+## Complete Example: Document Processing
+
+```typescript
+import { Inbound, type InboundWebhookPayload } from 'inboundemail'
+import { NextRequest, NextResponse } from 'next/server'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+const s3 = new S3Client({ region: 'us-east-1' })
+
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]
+
+export async function POST(request: NextRequest) {
+  const payload: InboundWebhookPayload = await request.json()
+  const { email } = payload
+  
+  if (!email.attachments || email.attachments.length === 0) {
+    return NextResponse.json({ success: true, message: 'No attachments' })
+  }
+  
+  console.log(`Processing ${email.attachments.length} attachment(s)...`)
+  
+  const processedFiles = []
+  
+  for (const attachment of email.attachments) {
+    try {
+      // Validate
+      if (!ALLOWED_TYPES.includes(attachment.content_type)) {
+        console.warn(`Skipping unsupported file: ${attachment.filename}`)
+        continue
+      }
+      
+      if (attachment.size > 10 * 1024 * 1024) {
+        console.warn(`File too large: ${attachment.filename}`)
+        continue
+      }
+      
+      // Download
+      console.log(`Downloading: ${attachment.filename}`)
+      const buffer = await inbound.attachments.download(email.id, attachment.filename)
+      
+      // Upload to S3
+      const key = `documents/${email.id}/${sanitizeFilename(attachment.filename)}`
+      
+      await s3.send(new PutObjectCommand({
+        Bucket: 'my-document-bucket',
+        Key: key,
+        Body: buffer,
+        ContentType: attachment.content_type,
+        Metadata: {
+          'email-id': email.id,
+          'sender': email.from?.addresses?.[0]?.address || 'unknown',
+          'original-filename': attachment.filename
+        }
+      }))
+      
+      const url = `https://my-document-bucket.s3.amazonaws.com/${key}`
+      
+      processedFiles.push({
+        filename: attachment.filename,
+        url,
+        size: attachment.size
+      })
+      
+      console.log(`✅ Processed: ${attachment.filename}`)
+      
+    } catch (error) {
+      console.error(`Failed to process ${attachment.filename}:`, error)
+    }
+  }
+  
+  // Send confirmation
+  if (processedFiles.length > 0) {
+    await inbound.reply(email, {
+      from: 'documents@yourdomain.com',
+      html: `
+        <p>We've received your ${processedFiles.length} document(s):</p>
+        <ul>
+          ${processedFiles.map(f => `<li>${f.filename}</li>`).join('')}
+        </ul>
+        <p>Thanks!</p>
+      `
+    })
+  }
+  
+  return NextResponse.json({
+    success: true,
+    processed: processedFiles.length
+  })
+}
+
+function sanitizeFilename(filename: string): string {
+  return filename.replace(/[^a-z0-9._-]/gi, '_').substring(0, 255)
+}
+```
+
+## Troubleshooting
+
+### Attachment Not Found
+
+```javascript
+try {
+  const buffer = await inbound.attachments.download(emailId, filename)
+} catch (error) {
+  if (error.status === 404) {
+    console.error('Attachment not found. Check:')
+    console.error('1. Email ID is correct')
+    console.error('2. Filename matches exactly (case-sensitive)')
+    console.error('3. Filename is URL-encoded if it contains spaces')
+  }
+}
+```
+
+### Large Downloads Timing Out
+
+```javascript
+// Increase timeout for large files
+const controller = new AbortController()
+const timeout = setTimeout(() => controller.abort(), 60000) // 60 seconds
+
+try {
+  const response = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${apiKey}` },
+    signal: controller.signal
+  })
+  
+  const buffer = await response.arrayBuffer()
+  clearTimeout(timeout)
+  
+  return Buffer.from(buffer)
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.error('Download timeout')
+  }
+  throw error
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sending Emails" icon="paper-plane" href="/guides/sending-emails">
+    Learn more about sending emails
+  </Card>
+  <Card title="Receiving Emails" icon="inbox" href="/guides/receiving-emails">
+    Handle incoming emails with webhooks
+  </Card>
+  <Card title="Replying" icon="reply" href="/guides/replying-to-emails">
+    Reply with attachments
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/attachments">
+    View attachments API docs
+  </Card>
+</CardGroup>

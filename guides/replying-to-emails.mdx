@@ -1,0 +1,384 @@
+---
+title: 'Replying to Emails'
+description: 'Reply to incoming emails with proper threading and conversation management'
+---
+
+## Overview
+
+The reply functionality maintains email threading with proper `In-Reply-To` and `References` headers, ensuring replies appear in the correct conversation thread.
+
+## Basic Reply
+
+### Using the SDK Helper
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+// In your webhook handler
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  const { email } = payload
+  
+  // Simple reply
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    text: 'Thanks for your email! We\'ll get back to you soon.'
+  })
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Using the API Directly
+
+```javascript
+// Reply to an email by ID
+const reply = await fetch('https://inbound.new/api/e2/emails/email_123/reply', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    from: 'support@yourdomain.com',
+    text: 'Thanks for reaching out!'
+  })
+})
+
+const data = await reply.json()
+console.log('Reply sent:', data.id)
+```
+
+## Reply with HTML
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  html: `
+    <div style="font-family: Arial, sans-serif;">
+      <p>Hi ${email.from?.addresses?.[0]?.name || 'there'},</p>
+      <p>Thanks for contacting us! We've received your inquiry about:</p>
+      <blockquote style="border-left: 3px solid #ccc; padding-left: 12px; color: #666;">
+        ${email.subject}
+      </blockquote>
+      <p>Our team will review and respond within 24 hours.</p>
+      <p>Best regards,<br>Support Team</p>
+    </div>
+  `,
+  text: `
+Hi ${email.from?.addresses?.[0]?.name || 'there'},
+
+Thanks for contacting us! We've received your inquiry about: ${email.subject}
+
+Our team will review and respond within 24 hours.
+
+Best regards,
+Support Team
+  `.trim()
+})
+```
+
+## How Threading Works
+
+When you reply to an email, Inbound automatically:
+
+<Steps>
+  <Step title="Extracts Original Headers">
+    - Gets the `Message-ID` from the original email
+    - Retrieves any existing `References` headers
+  </Step>
+  
+  <Step title="Builds Reply Headers">
+    - Sets `In-Reply-To` to the original `Message-ID`
+    - Appends original `Message-ID` to `References` header
+    - Generates new unique `Message-ID` for the reply
+  </Step>
+  
+  <Step title="Maintains Subject">
+    - Defaults to `Re: <original subject>`
+    - Or uses your custom subject if provided
+  </Step>
+</Steps>
+
+This ensures email clients like Gmail, Outlook, and Apple Mail group the messages as a conversation.
+
+## Reply Options
+
+### Custom Subject
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  subject: 'Re: Your Support Request #12345',
+  text: 'We\'ve created ticket #12345 for your inquiry.'
+})
+```
+
+### Custom Recipients
+
+By default, replies go to the original sender. Override with:
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  to: 'custom@example.com', // Override recipient
+  text: 'This reply goes to a different address.'
+})
+```
+
+### Reply All
+
+Include original CC recipients:
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  reply_all: true,
+  text: 'This reply will include all original recipients.'
+})
+```
+
+This automatically adds all original CC recipients to the reply.
+
+### With Attachments
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  html: '<p>Please find the requested document attached.</p>',
+  attachments: [
+    {
+      filename: 'invoice.pdf',
+      content: base64Content,
+      content_type: 'application/pdf'
+    }
+  ]
+})
+```
+
+### With Tags
+
+```javascript
+await inbound.reply(email, {
+  from: 'support@yourdomain.com',
+  text: 'Thanks for your message!',
+  tags: [
+    { name: 'type', value: 'auto-reply' },
+    { name: 'original_id', value: email.id }
+  ]
+})
+```
+
+## Real-World Examples
+
+### Auto-Reply System
+
+```javascript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY)
+
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  const { email } = payload
+  
+  // Check if this is the first email in a thread
+  const isNewThread = !email.in_reply_to
+  
+  if (isNewThread) {
+    // Auto-reply to new conversations
+    const senderName = email.from?.addresses?.[0]?.name || 'there'
+    
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      html: `
+        <p>Hi ${senderName},</p>
+        <p>Thanks for reaching out! We've received your email and will respond within 24 hours.</p>
+        <p>In the meantime, you might find these resources helpful:</p>
+        <ul>
+          <li><a href="https://docs.yourapp.com">Documentation</a></li>
+          <li><a href="https://yourapp.com/faq">FAQ</a></li>
+          <li><a href="https://status.yourapp.com">Service Status</a></li>
+        </ul>
+        <p>Best regards,<br>Support Team</p>
+      `,
+      tags: [{ name: 'type', value: 'auto-reply' }]
+    })
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Smart Reply Based on Content
+
+```javascript
+export async function POST(request: NextRequest) {
+  const payload = await request.json()
+  const { email } = payload
+  
+  const subject = email.subject?.toLowerCase() || ''
+  const body = email.text_body?.toLowerCase() || ''
+  
+  // Detect question type
+  if (subject.includes('pricing') || body.includes('cost')) {
+    await inbound.reply(email, {
+      from: 'sales@yourdomain.com',
+      html: `
+        <p>Thanks for your interest in our pricing!</p>
+        <p>You can view our plans here: <a href="https://yourapp.com/pricing">Pricing Page</a></p>
+        <p>For custom enterprise quotes, reply to this email or schedule a call.</p>
+      `
+    })
+  } else if (subject.includes('support') || body.includes('help')) {
+    await inbound.reply(email, {
+      from: 'support@yourdomain.com',
+      html: `
+        <p>We've created a support ticket for your inquiry.</p>
+        <p>Our team will respond within 24 hours.</p>
+      `
+    })
+  } else {
+    await inbound.reply(email, {
+      from: 'hello@yourdomain.com',
+      html: '<p>Thanks for your email! We\'ll get back to you soon.</p>'
+    })
+  }
+  
+  return NextResponse.json({ success: true })
+}
+```
+
+### Support Ticket Confirmation
+
+```javascript
+async function createTicketAndReply(email: any) {
+  // Create ticket in your system
+  const ticket = await db.tickets.create({
+    subject: email.subject,
+    description: email.text_body,
+    customer_email: email.from?.addresses?.[0]?.address,
+    email_id: email.id
+  })
+  
+  // Send confirmation reply
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    html: `
+      <div style="font-family: Arial, sans-serif;">
+        <h2>Support Ticket Created</h2>
+        <p>We've received your inquiry and created ticket <strong>#${ticket.id}</strong>.</p>
+        <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0;"><strong>Subject:</strong> ${email.subject}</p>
+          <p style="margin: 8px 0 0;"><strong>Status:</strong> Open</p>
+        </div>
+        <p>Track your ticket: <a href="https://yourapp.com/tickets/${ticket.id}">View Status</a></p>
+        <p>Expected response time: Within 24 hours</p>
+      </div>
+    `,
+    tags: [
+      { name: 'ticket_id', value: ticket.id },
+      { name: 'type', value: 'ticket_confirmation' }
+    ]
+  })
+  
+  return ticket
+}
+```
+
+## Replying to Threads
+
+You can reply to an entire thread (not just a single email) by using the thread ID:
+
+```javascript
+// Reply to a thread (replies to the latest message)
+const reply = await fetch('https://inbound.new/api/e2/emails/thread_abc123/reply', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.INBOUND_API_KEY}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    from: 'support@yourdomain.com',
+    text: 'Following up on this conversation...'
+  })
+})
+```
+
+<Note>
+  Learn more about threads in the [Email Threads Guide](/guides/email-threads).
+</Note>
+
+## Response Format
+
+Successful reply returns:
+
+```json
+{
+  "id": "sent_xyz789",
+  "message_id": "<xyz789@yourdomain.com>",
+  "aws_message_id": "01020185-1234-5678-9abc-def012345678-000000",
+  "replied_to_email_id": "email_abc123",
+  "replied_to_thread_id": "thread_def456",
+  "is_thread_reply": false
+}
+```
+
+## Error Handling
+
+```javascript
+try {
+  await inbound.reply(email, {
+    from: 'support@yourdomain.com',
+    text: 'Thanks for your email!'
+  })
+} catch (error) {
+  if (error.status === 404) {
+    console.error('Original email not found')
+  } else if (error.status === 403) {
+    console.error('Domain not verified or unauthorized')
+  } else if (error.status === 400) {
+    console.error('Invalid reply data:', error.message)
+  } else {
+    console.error('Failed to send reply:', error)
+  }
+}
+```
+
+## Important Notes
+
+<Warning>
+  **Domain Verification Required** - You can only reply from domains you've verified. The special `agent@inbnd.dev` address cannot be used for replies.
+</Warning>
+
+<Warning>
+  **Blocked Recipients** - Replies to addresses that previously bounced will be rejected. The API returns a 400 error listing blocked recipients.
+</Warning>
+
+## Best Practices
+
+1. **Include both HTML and text** for maximum compatibility
+2. **Use tags** to track reply types and categories
+3. **Return 200 from webhooks** even if reply fails to prevent retries
+4. **Personalize replies** using the sender's name from `email.from.addresses[0].name`
+5. **Check thread status** before auto-replying to avoid reply loops
+6. **Handle errors gracefully** and log failures to your monitoring system
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Email Threads" icon="comments" href="/guides/email-threads">
+    View full conversation threads
+  </Card>
+  <Card title="Attachments" icon="paperclip" href="/guides/attachments">
+    Include files in your replies
+  </Card>
+  <Card title="Sending Emails" icon="paper-plane" href="/guides/sending-emails">
+    Learn about sending emails
+  </Card>
+  <Card title="Webhook Verification" icon="shield" href="/guides/webhook-verification">
+    Secure your webhook endpoint
+  </Card>
+</CardGroup>

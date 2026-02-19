@@ -1,0 +1,678 @@
+---
+title: 'Domains'
+description: 'Manage email domains and DNS verification'
+---
+
+## Create Domain
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.inbound.new/api/e2/domains \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "example.com"
+  }'
+```
+
+```typescript TypeScript SDK
+import { Inbound } from '@inbound/sdk'
+
+const inbound = new Inbound({ apiKey: 'YOUR_API_KEY' })
+
+const domain = await inbound.domains.create({
+  domain: 'example.com'
+})
+```
+</CodeGroup>
+
+### POST `/api/e2/domains`
+
+Add a new domain for email receiving. Automatically initiates verification and returns required DNS records. Subdomains inherit verification from their verified parent domain.
+
+#### Request Parameters
+
+<ParamField path="domain" type="string" required>
+  Domain name to add (e.g., `example.com` or `mail.example.com`).
+  
+  Must be between 1-253 characters and match valid domain format.
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Unique identifier for the domain.
+</ResponseField>
+
+<ResponseField name="domain" type="string">
+  Domain name.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Verification status: `pending`, `verified`, or `failed`.
+</ResponseField>
+
+<ResponseField name="canReceiveEmails" type="boolean">
+  Whether the domain can currently receive emails.
+</ResponseField>
+
+<ResponseField name="hasMxRecords" type="boolean">
+  Whether MX records have been detected.
+</ResponseField>
+
+<ResponseField name="domainProvider" type="string">
+  Detected DNS provider (e.g., Cloudflare, GoDaddy).
+</ResponseField>
+
+<ResponseField name="providerConfidence" type="string">
+  Confidence level of provider detection.
+</ResponseField>
+
+<ResponseField name="mailFromDomain" type="string">
+  Custom MAIL FROM domain (e.g., `mail.example.com`).
+</ResponseField>
+
+<ResponseField name="mailFromDomainStatus" type="string">
+  Status of MAIL FROM domain verification.
+</ResponseField>
+
+<ResponseField name="dnsRecords" type="array">
+  Array of DNS records to add.
+  
+  <Expandable title="DNS Record Object">
+    <ResponseField name="type" type="string">
+      Record type: `MX`, `TXT`, or `CNAME`.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      DNS record name/host.
+    </ResponseField>
+    
+    <ResponseField name="value" type="string">
+      DNS record value/content.
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Human-readable description of the record's purpose.
+    </ResponseField>
+    
+    <ResponseField name="isRequired" type="boolean">
+      Whether this record is required for verification.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="dnsConflict" type="object">
+  DNS conflict information if existing records were detected.
+  
+  <Expandable title="DNS Conflict Object">
+    <ResponseField name="hasConflict" type="boolean">
+      Whether a DNS conflict exists.
+    </ResponseField>
+    
+    <ResponseField name="conflictType" type="string">
+      Type of conflict: `mx`, `cname`, or `both`.
+    </ResponseField>
+    
+    <ResponseField name="message" type="string">
+      Description of the conflict.
+    </ResponseField>
+    
+    <ResponseField name="existingRecords" type="array">
+      Array of existing DNS records causing the conflict.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the domain was added.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the domain was last updated.
+</ResponseField>
+
+<ResponseField name="parentDomain" type="string">
+  Parent domain name (only for subdomains).
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Additional information about the domain creation.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "id": "dom_abc123",
+  "domain": "example.com",
+  "status": "pending",
+  "canReceiveEmails": false,
+  "hasMxRecords": false,
+  "domainProvider": "Cloudflare",
+  "providerConfidence": "high",
+  "mailFromDomain": "mail.example.com",
+  "mailFromDomainStatus": "Pending",
+  "dnsRecords": [
+    {
+      "type": "MX",
+      "name": "example.com",
+      "value": "10 inbound-smtp.us-east-2.amazonaws.com",
+      "description": "Required for receiving emails",
+      "isRequired": true
+    },
+    {
+      "type": "TXT",
+      "name": "_amazonses.example.com",
+      "value": "abc123def456",
+      "description": "Domain verification token",
+      "isRequired": true
+    },
+    {
+      "type": "TXT",
+      "name": "example.com",
+      "value": "v=spf1 include:amazonses.com ~all",
+      "description": "SPF record for sending authentication",
+      "isRequired": true
+    },
+    {
+      "type": "MX",
+      "name": "mail.example.com",
+      "value": "10 feedback-smtp.us-east-2.amazonses.com",
+      "description": "MAIL FROM domain MX record",
+      "isRequired": true
+    },
+    {
+      "type": "TXT",
+      "name": "mail.example.com",
+      "value": "v=spf1 include:amazonses.com ~all",
+      "description": "MAIL FROM domain SPF record",
+      "isRequired": true
+    }
+  ],
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## List Domains
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/domains?limit=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const domains = await inbound.domains.list({
+  limit: 50
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/domains`
+
+Get paginated list of domains for authenticated user with optional filtering.
+
+#### Query Parameters
+
+<ParamField query="limit" type="integer" default="50">
+  Maximum number of domains to return (1-100).
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Number of domains to skip for pagination.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by verification status: `pending`, `verified`, or `failed`.
+</ParamField>
+
+<ParamField query="canReceive" type="string">
+  Filter by email receiving capability: `true` or `false`.
+</ParamField>
+
+<ParamField query="check" type="string">
+  Perform live DNS and SES verification check. Set to `true` to enable.
+</ParamField>
+
+#### Response
+
+<ResponseField name="data" type="array">
+  Array of domain objects.
+  
+  <Expandable title="Domain Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the domain.
+    </ResponseField>
+    
+    <ResponseField name="domain" type="string">
+      Domain name.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Verification status: `pending`, `verified`, or `failed`.
+    </ResponseField>
+    
+    <ResponseField name="canReceiveEmails" type="boolean">
+      Whether the domain can receive emails.
+    </ResponseField>
+    
+    <ResponseField name="hasMxRecords" type="boolean">
+      Whether MX records are configured.
+    </ResponseField>
+    
+    <ResponseField name="domainProvider" type="string">
+      Detected DNS provider.
+    </ResponseField>
+    
+    <ResponseField name="providerConfidence" type="string">
+      Provider detection confidence level.
+    </ResponseField>
+    
+    <ResponseField name="lastDnsCheck" type="string">
+      ISO 8601 timestamp of last DNS verification check.
+    </ResponseField>
+    
+    <ResponseField name="lastSesCheck" type="string">
+      ISO 8601 timestamp of last SES verification check.
+    </ResponseField>
+    
+    <ResponseField name="isCatchAllEnabled" type="boolean">
+      Whether catch-all is enabled for this domain.
+    </ResponseField>
+    
+    <ResponseField name="catchAllEndpointId" type="string">
+      ID of the endpoint receiving catch-all emails.
+    </ResponseField>
+    
+    <ResponseField name="mailFromDomain" type="string">
+      Custom MAIL FROM domain.
+    </ResponseField>
+    
+    <ResponseField name="mailFromDomainStatus" type="string">
+      MAIL FROM domain verification status.
+    </ResponseField>
+    
+    <ResponseField name="mailFromDomainVerifiedAt" type="string">
+      ISO 8601 timestamp when MAIL FROM was verified.
+    </ResponseField>
+    
+    <ResponseField name="receiveDmarcEmails" type="boolean">
+      Whether DMARC reports are received for this domain.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the domain was created.
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp when the domain was last updated.
+    </ResponseField>
+    
+    <ResponseField name="userId" type="string">
+      ID of the user who owns this domain.
+    </ResponseField>
+    
+    <ResponseField name="stats" type="object">
+      Domain statistics.
+      
+      <Expandable title="Stats Object">
+        <ResponseField name="totalEmailAddresses" type="number">
+          Total number of email addresses configured.
+        </ResponseField>
+        
+        <ResponseField name="activeEmailAddresses" type="number">
+          Number of active email addresses.
+        </ResponseField>
+        
+        <ResponseField name="hasCatchAll" type="boolean">
+          Whether catch-all is configured.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="catchAllEndpoint" type="object">
+      Catch-all endpoint details (if configured).
+    </ResponseField>
+    
+    <ResponseField name="verificationCheck" type="object">
+      Live verification check results (only if `check=true`).
+      
+      <Expandable title="Verification Check Object">
+        <ResponseField name="dnsRecords" type="array">
+          Array of DNS record verification results.
+        </ResponseField>
+        
+        <ResponseField name="sesStatus" type="string">
+          SES verification status.
+        </ResponseField>
+        
+        <ResponseField name="isFullyVerified" type="boolean">
+          Whether all verification checks passed.
+        </ResponseField>
+        
+        <ResponseField name="lastChecked" type="string">
+          ISO 8601 timestamp of the check.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+  
+  <Expandable title="Pagination Object">
+    <ResponseField name="limit" type="number">
+      Number of results per page.
+    </ResponseField>
+    
+    <ResponseField name="offset" type="number">
+      Number of results skipped.
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total number of matching domains.
+    </ResponseField>
+    
+    <ResponseField name="hasMore" type="boolean">
+      Whether there are more results available.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "data": [
+    {
+      "id": "dom_abc123",
+      "domain": "example.com",
+      "status": "verified",
+      "canReceiveEmails": true,
+      "hasMxRecords": true,
+      "domainProvider": "Cloudflare",
+      "providerConfidence": "high",
+      "lastDnsCheck": "2024-01-15T10:30:00Z",
+      "lastSesCheck": "2024-01-15T10:30:00Z",
+      "isCatchAllEnabled": true,
+      "catchAllEndpointId": "ep_xyz789",
+      "mailFromDomain": "mail.example.com",
+      "mailFromDomainStatus": "Success",
+      "mailFromDomainVerifiedAt": "2024-01-15T10:30:00Z",
+      "receiveDmarcEmails": false,
+      "createdAt": "2024-01-15T10:00:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z",
+      "userId": "usr_abc123",
+      "stats": {
+        "totalEmailAddresses": 5,
+        "activeEmailAddresses": 4,
+        "hasCatchAll": true
+      },
+      "catchAllEndpoint": {
+        "id": "ep_xyz789",
+        "name": "Webhook Endpoint",
+        "type": "webhook",
+        "isActive": true
+      }
+    }
+  ],
+  "pagination": {
+    "limit": 50,
+    "offset": 0,
+    "total": 1,
+    "hasMore": false
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Domain
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.inbound.new/api/e2/domains/dom_abc123?check=true" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const domain = await inbound.domains.get('dom_abc123', {
+  check: true
+})
+```
+</CodeGroup>
+
+### GET `/api/e2/domains/:id`
+
+Get detailed information about a specific domain including DNS records. Use `?check=true` for a live verification check.
+
+#### Query Parameters
+
+<ParamField query="check" type="string">
+  Perform live DNS and SES verification check. Set to `true` to enable.
+</ParamField>
+
+#### Response
+
+Same structure as individual domain object in List Domains response, plus:
+
+<ResponseField name="dnsRecords" type="array">
+  Array of all DNS records for this domain.
+  
+  <Expandable title="DNS Record Object">
+    <ResponseField name="id" type="string">
+      DNS record ID.
+    </ResponseField>
+    
+    <ResponseField name="domainId" type="string">
+      Parent domain ID.
+    </ResponseField>
+    
+    <ResponseField name="recordType" type="string">
+      Record type: `MX`, `TXT`, or `CNAME`.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Record name/host.
+    </ResponseField>
+    
+    <ResponseField name="value" type="string">
+      Record value/content.
+    </ResponseField>
+    
+    <ResponseField name="isRequired" type="boolean">
+      Whether this record is required.
+    </ResponseField>
+    
+    <ResponseField name="isVerified" type="boolean">
+      Whether this record has been verified.
+    </ResponseField>
+    
+    <ResponseField name="lastChecked" type="string">
+      ISO 8601 timestamp of last verification check.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the record was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="authRecommendations" type="object">
+  Recommended authentication records (SPF, DMARC) if not configured.
+</ResponseField>
+
+<ResponseField name="inheritsFromParent" type="boolean">
+  Whether this subdomain inherits verification from parent.
+</ResponseField>
+
+<ResponseField name="parentDomain" type="string">
+  Parent domain name (for subdomains).
+</ResponseField>
+
+---
+
+## Update Domain
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH https://api.inbound.new/api/e2/domains/dom_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isCatchAllEnabled": true,
+    "catchAllEndpointId": "ep_xyz789"
+  }'
+```
+
+```typescript TypeScript SDK
+const domain = await inbound.domains.update('dom_abc123', {
+  isCatchAllEnabled: true,
+  catchAllEndpointId: 'ep_xyz789'
+})
+```
+</CodeGroup>
+
+### PATCH `/api/e2/domains/:id`
+
+Update catch-all email settings for a domain. Catch-all receives emails sent to any address on your domain. Domain must be verified first.
+
+#### Request Parameters
+
+<ParamField path="isCatchAllEnabled" type="boolean" required>
+  Enable or disable catch-all for this domain.
+</ParamField>
+
+<ParamField path="catchAllEndpointId" type="string">
+  ID of the endpoint to route catch-all emails to. Required when enabling catch-all.
+</ParamField>
+
+#### Response
+
+<ResponseField name="id" type="string">
+  Domain ID.
+</ResponseField>
+
+<ResponseField name="domain" type="string">
+  Domain name.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Verification status.
+</ResponseField>
+
+<ResponseField name="isCatchAllEnabled" type="boolean">
+  Whether catch-all is now enabled.
+</ResponseField>
+
+<ResponseField name="catchAllEndpointId" type="string">
+  ID of the catch-all endpoint.
+</ResponseField>
+
+<ResponseField name="catchAllEndpoint" type="object">
+  Catch-all endpoint details.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp of the update.
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "id": "dom_abc123",
+  "domain": "example.com",
+  "status": "verified",
+  "isCatchAllEnabled": true,
+  "catchAllEndpointId": "ep_xyz789",
+  "catchAllEndpoint": {
+    "id": "ep_xyz789",
+    "name": "Webhook Endpoint",
+    "type": "webhook",
+    "isActive": true
+  },
+  "updatedAt": "2024-01-15T10:35:00Z"
+}
+```
+</ResponseExample>
+
+---
+
+## Delete Domain
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.inbound.new/api/e2/domains/dom_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```typescript TypeScript SDK
+const result = await inbound.domains.delete('dom_abc123')
+```
+</CodeGroup>
+
+### DELETE `/api/e2/domains/:id`
+
+Delete a domain and all associated resources including email addresses, DNS records, and SES configurations. Root domains with subdomains must have subdomains deleted first.
+
+#### Response
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable message about the deletion result.
+</ResponseField>
+
+<ResponseField name="deletedResources" type="object">
+  Summary of deleted resources.
+  
+  <Expandable title="Deleted Resources Object">
+    <ResponseField name="domain" type="string">
+      Domain name that was deleted.
+    </ResponseField>
+    
+    <ResponseField name="emailAddresses" type="number">
+      Number of email addresses deleted.
+    </ResponseField>
+    
+    <ResponseField name="dnsRecords" type="number">
+      Number of DNS records deleted.
+    </ResponseField>
+    
+    <ResponseField name="blockedEmails" type="number">
+      Number of blocked email entries deleted.
+    </ResponseField>
+    
+    <ResponseField name="sesIdentity" type="boolean">
+      Whether SES identity was deleted.
+    </ResponseField>
+    
+    <ResponseField name="sesReceiptRules" type="boolean">
+      Whether SES receipt rules were removed.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "Successfully deleted domain example.com and all associated resources",
+  "deletedResources": {
+    "domain": "example.com",
+    "emailAddresses": 5,
+    "dnsRecords": 8,
+    "blockedEmails": 2,
+    "sesIdentity": true,
+    "sesReceiptRules": true
+  }
+}
+```
+</ResponseExample>

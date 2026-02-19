@@ -1,0 +1,469 @@
+---
+title: 'Installation & Setup'
+description: 'Complete guide to installing and configuring the Inbound SDK in your project'
+---
+
+# Installation & Setup
+
+This guide covers everything you need to install and configure Inbound in your application, including SDK installation, environment configuration, and TypeScript setup.
+
+## SDK Installation
+
+Install the Inbound SDK using your preferred package manager:
+
+<Tabs>
+  <Tab title="npm">
+    ```bash
+    npm install inboundemail
+    ```
+
+    The Inbound SDK is published as `inboundemail` on npm. It includes TypeScript definitions and works with Node.js 18+ and all modern JavaScript frameworks.
+  </Tab>
+
+  <Tab title="yarn">
+    ```bash
+    yarn add inboundemail
+    ```
+
+    Using Yarn v2+? The SDK is compatible with all Yarn versions including Plug'n'Play mode.
+  </Tab>
+
+  <Tab title="bun">
+    ```bash
+    bun add inboundemail
+    ```
+
+    Bun users get native TypeScript support and faster installation times.
+  </Tab>
+
+  <Tab title="pnpm">
+    ```bash
+    pnpm add inboundemail
+    ```
+
+    pnpm's efficient disk space usage makes it great for monorepos with multiple projects using Inbound.
+  </Tab>
+</Tabs>
+
+<Note>
+  **Current SDK Version**: 0.18.0
+  
+  Check the [changelog](https://github.com/R44VC0RP/inbound/releases) for the latest features and updates.
+</Note>
+
+## Getting Your API Key
+
+<Steps>
+  <Step title="Sign up for Inbound">
+    Visit [inbound.new](https://inbound.new) and create an account. You can sign up with:
+    - Email and password
+    - GitHub OAuth
+    - Google OAuth
+  </Step>
+
+  <Step title="Create an API key">
+    Once logged in, navigate to **Settings > API Keys** and click **Create API Key**.
+
+    Give your API key a descriptive name like "Production API" or "Development Environment".
+  </Step>
+
+  <Step title="Copy and store securely">
+    Copy your API key immediately - you won't be able to see it again!
+
+    <Warning>
+      Never commit API keys to version control. Always use environment variables.
+    </Warning>
+  </Step>
+</Steps>
+
+## Environment Variables
+
+Store your API key in environment variables for secure access:
+
+<Tabs>
+  <Tab title=".env">
+    Create a `.env` file in your project root:
+
+    ```bash .env
+    INBOUND_API_KEY=your_api_key_here
+    ```
+
+    Add `.env` to your `.gitignore`:
+
+    ```bash .gitignore
+    .env
+    .env.local
+    .env.*.local
+    ```
+  </Tab>
+
+  <Tab title="Next.js">
+    Next.js automatically loads `.env.local` for local development:
+
+    ```bash .env.local
+    INBOUND_API_KEY=your_api_key_here
+    ```
+
+    For production, add environment variables in your hosting platform:
+    - Vercel: Project Settings > Environment Variables
+    - Netlify: Site Settings > Environment Variables
+    - Railway: Project > Variables
+  </Tab>
+
+  <Tab title="Vercel">
+    Add environment variables in your Vercel project:
+
+    1. Go to your project settings
+    2. Navigate to **Environment Variables**
+    3. Add `INBOUND_API_KEY` with your API key
+    4. Select which environments to apply it to (Production, Preview, Development)
+
+    ```bash Terminal
+    # Or use Vercel CLI
+    vercel env add INBOUND_API_KEY
+    ```
+  </Tab>
+
+  <Tab title="Docker">
+    Pass environment variables to your Docker container:
+
+    ```dockerfile Dockerfile
+    ENV INBOUND_API_KEY=your_api_key_here
+    ```
+
+    Or use docker-compose:
+
+    ```yaml docker-compose.yml
+    version: '3.8'
+    services:
+      app:
+        environment:
+          - INBOUND_API_KEY=${INBOUND_API_KEY}
+    ```
+
+    Then load from `.env` file:
+
+    ```bash
+    docker-compose --env-file .env up
+    ```
+  </Tab>
+</Tabs>
+
+## TypeScript Configuration
+
+The Inbound SDK is written in TypeScript and includes full type definitions. No additional `@types` packages needed!
+
+### Recommended tsconfig.json
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020"],
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
+```
+
+### Type Imports
+
+The SDK exports comprehensive types for all API operations:
+
+```typescript
+import { 
+  Inbound,
+  type InboundWebhookPayload,
+  type InboundEmail,
+  type InboundEmailAddress,
+  type InboundAttachment,
+  isInboundWebhookPayload 
+} from 'inboundemail'
+```
+
+<Tip>
+  Use `isInboundWebhookPayload()` to validate webhook payloads with type narrowing in TypeScript.
+</Tip>
+
+## Framework-Specific Setup
+
+<Tabs>
+  <Tab title="Next.js">
+    ### Next.js 15 App Router
+
+    Create a route handler for webhooks:
+
+    ```typescript app/api/webhooks/email/route.ts
+    import { NextRequest, NextResponse } from 'next/server'
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+    export async function POST(request: NextRequest) {
+      const payload = await request.json()
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
+      }
+      
+      // Process email
+      console.log('Email received:', payload.email.subject)
+      
+      return NextResponse.json({ success: true })
+    }
+    ```
+
+    ### Next.js Pages Router
+
+    ```typescript pages/api/webhooks/email.ts
+    import type { NextApiRequest, NextApiResponse } from 'next'
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+    export default async function handler(
+      req: NextApiRequest,
+      res: NextApiResponse
+    ) {
+      if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' })
+      }
+      
+      const payload = req.body
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return res.status(400).json({ error: 'Invalid webhook' })
+      }
+      
+      // Process email
+      console.log('Email received:', payload.email.subject)
+      
+      return res.status(200).json({ success: true })
+    }
+    ```
+  </Tab>
+
+  <Tab title="Express">
+    ### Express.js
+
+    ```typescript
+    import express from 'express'
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+    const app = express()
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+    app.use(express.json())
+
+    app.post('/webhooks/email', async (req, res) => {
+      const payload = req.body
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return res.status(400).json({ error: 'Invalid webhook' })
+      }
+      
+      // Process email
+      console.log('Email received:', payload.email.subject)
+      
+      // Auto-reply example
+      await inbound.reply(payload.email, {
+        from: 'support@yourdomain.com',
+        text: 'Thanks for your email!'
+      })
+      
+      res.json({ success: true })
+    })
+
+    app.listen(3000, () => {
+      console.log('Server running on port 3000')
+    })
+    ```
+  </Tab>
+
+  <Tab title="Fastify">
+    ### Fastify
+
+    ```typescript
+    import Fastify from 'fastify'
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+    const fastify = Fastify({ logger: true })
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+    fastify.post('/webhooks/email', async (request, reply) => {
+      const payload = request.body
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return reply.code(400).send({ error: 'Invalid webhook' })
+      }
+      
+      // Process email
+      fastify.log.info(`Email received: ${payload.email.subject}`)
+      
+      return { success: true }
+    })
+
+    fastify.listen({ port: 3000 }, (err) => {
+      if (err) throw err
+      console.log('Server running on port 3000')
+    })
+    ```
+  </Tab>
+
+  <Tab title="Remix">
+    ### Remix
+
+    ```typescript app/routes/webhooks.email.tsx
+    import { json } from '@remix-run/node'
+    import type { ActionFunctionArgs } from '@remix-run/node'
+    import { Inbound, isInboundWebhookPayload } from 'inboundemail'
+
+    const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+    export async function action({ request }: ActionFunctionArgs) {
+      if (request.method !== 'POST') {
+        return json({ error: 'Method not allowed' }, { status: 405 })
+      }
+      
+      const payload = await request.json()
+      
+      if (!isInboundWebhookPayload(payload)) {
+        return json({ error: 'Invalid webhook' }, { status: 400 })
+      }
+      
+      // Process email
+      console.log('Email received:', payload.email.subject)
+      
+      return json({ success: true })
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Initializing the Client
+
+Create an Inbound client instance to interact with the API:
+
+```typescript
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+```
+
+### Client Configuration Options
+
+The Inbound client accepts optional configuration:
+
+```typescript
+const inbound = new Inbound(process.env.INBOUND_API_KEY!, {
+  baseUrl: 'https://api.inbound.new', // Custom API base URL
+  timeout: 30000, // Request timeout in milliseconds (default: 30000)
+})
+```
+
+<Note>
+  Most users don't need to configure these options. The defaults work for all production use cases.
+</Note>
+
+## Verification
+
+Verify your installation is working:
+
+```typescript verify.ts
+import { Inbound } from 'inboundemail'
+
+const inbound = new Inbound(process.env.INBOUND_API_KEY!)
+
+async function verify() {
+  try {
+    // List domains to verify API connection
+    const domains = await inbound.domains.list()
+    console.log('✅ Inbound SDK connected successfully!')
+    console.log(`You have ${domains.data.length} domain(s) configured`)
+  } catch (error) {
+    console.error('❌ Failed to connect:', error)
+  }
+}
+
+verify()
+```
+
+Run the verification script:
+
+<CodeGroup>
+  ```bash Node.js
+  node verify.ts
+  ```
+
+  ```bash Bun
+  bun run verify.ts
+  ```
+
+  ```bash tsx
+  tsx verify.ts
+  ```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Module not found error">
+    If you see `Cannot find module 'inboundemail'`:
+
+    1. Verify the package is installed: `npm list inboundemail`
+    2. Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
+    3. Clear your build cache: `rm -rf .next` (Next.js) or equivalent
+  </Accordion>
+
+  <Accordion title="TypeScript type errors">
+    If TypeScript can't find the types:
+
+    1. Ensure you're using TypeScript 5.0+
+    2. Check your `tsconfig.json` includes `"moduleResolution": "bundler"` or `"node"`
+    3. Try restarting your TypeScript server in your editor
+  </Accordion>
+
+  <Accordion title="API authentication failed">
+    If you get 401 Unauthorized errors:
+
+    1. Verify your API key is correct
+    2. Check the environment variable is loaded: `console.log(process.env.INBOUND_API_KEY)`
+    3. Ensure you're not accidentally committing your `.env` file
+    4. Regenerate your API key if you suspect it's compromised
+  </Accordion>
+
+  <Accordion title="Webhook not receiving requests">
+    If your webhook endpoint isn't receiving emails:
+
+    1. Verify your webhook URL is publicly accessible
+    2. Check your email address configuration: `inbound.emailAddresses.list()`
+    3. Ensure your endpoint returns a 200 status code
+    4. Test locally with `bun run inbound-webhook-test hello@yourdomain.com`
+    5. Check your domain's DNS records are properly configured
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Follow the quickstart to send your first email and receive webhooks
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Explore all available SDK methods and API endpoints
+  </Card>
+  
+  <Card title="Webhook Examples" icon="webhook" href="/guides/receiving-emails">
+    See real-world examples of webhook processing
+  </Card>
+  
+  <Card title="Webhook Verification" icon="shield" href="/guides/webhook-verification">
+    Learn how to verify webhooks and test locally
+  </Card>
+</CardGroup>
