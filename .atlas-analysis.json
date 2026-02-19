@@ -1,0 +1,133 @@
+{
+  "projectType": "api-service",
+  "projectName": "Inbound",
+  "projectDescription": "Email infrastructure for agent and indie developers with programmable email addresses and webhooks",
+  "theme": "almond",
+  "primaryColor": "#8161FF",
+  "lightColor": "#8161FF",
+  "darkColor": "#8161FF",
+  "navigation": {
+    "anchors": [
+      {
+        "anchor": "Documentation",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/email-addresses",
+              "concepts/domains",
+              "concepts/webhooks",
+              "concepts/endpoints"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/sending-emails",
+              "guides/receiving-emails",
+              "guides/replying-to-emails",
+              "guides/domain-setup",
+              "guides/webhook-verification",
+              "guides/attachments",
+              "guides/email-threads"
+            ]
+          },
+          {
+            "group": "SDK",
+            "pages": [
+              "sdk/typescript",
+              "sdk/authentication",
+              "sdk/error-handling"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/mcp",
+              "integrations/better-auth",
+              "integrations/resend-migration"
+            ]
+          }
+        ]
+      },
+      {
+        "anchor": "API Reference",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/introduction",
+              "api-reference/authentication",
+              "api-reference/rate-limits",
+              "api-reference/errors",
+              "api-reference/pagination",
+              "api-reference/webhooks"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api-reference/emails",
+              "api-reference/domains",
+              "api-reference/email-addresses",
+              "api-reference/endpoints",
+              "api-reference/attachments",
+              "api-reference/mail-threads"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Send transactional emails with Resend-compatible API",
+    "Receive emails via programmable webhooks",
+    "Reply to emails with full threading support",
+    "Domain verification and DNS management",
+    "Email address creation with custom webhooks",
+    "Attachment handling with S3 storage",
+    "Email thread management",
+    "Webhook signature verification",
+    "Rate limiting and spam filtering",
+    "TypeScript SDK with full type safety",
+    "MCP (Model Context Protocol) server support",
+    "Better Auth integration"
+  ],
+  "publicApiSurface": [
+    "POST /api/e2/emails - Send emails",
+    "GET /api/e2/emails - List sent emails",
+    "GET /api/e2/emails/{id} - Get email details",
+    "POST /api/e2/emails/{id}/reply - Reply to email",
+    "POST /api/e2/emails/{id}/retry - Retry failed email",
+    "DELETE /api/e2/emails/{id} - Delete email",
+    "GET /api/e2/domains - List domains",
+    "POST /api/e2/domains - Create domain",
+    "GET /api/e2/domains/{id} - Get domain details",
+    "PATCH /api/e2/domains/{id} - Update domain",
+    "DELETE /api/e2/domains/{id} - Delete domain",
+    "GET /api/e2/email-addresses - List email addresses",
+    "POST /api/e2/email-addresses - Create email address",
+    "GET /api/e2/email-addresses/{id} - Get email address",
+    "PUT /api/e2/email-addresses/{id} - Update email address",
+    "DELETE /api/e2/email-addresses/{id} - Delete email address",
+    "GET /api/e2/endpoints - List endpoints",
+    "POST /api/e2/endpoints - Create endpoint",
+    "GET /api/e2/endpoints/{id} - Get endpoint details",
+    "PUT /api/e2/endpoints/{id} - Update endpoint",
+    "DELETE /api/e2/endpoints/{id} - Delete endpoint",
+    "POST /api/e2/endpoints/{id}/test - Test endpoint",
+    "GET /api/e2/attachments/{id}/{filename} - Retrieve attachment",
+    "GET /api/e2/mail/threads - List email threads",
+    "GET /api/e2/mail/threads/{id} - Get thread details"
+  ]
+}
